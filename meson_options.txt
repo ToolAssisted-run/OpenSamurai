@@ -1,0 +1,18 @@
+option('buildTests',
+  type : 'boolean',
+  value : true,
+  description : 'Build test programs and create the test suite',
+  yield: true
+)
+
+option('gameDir',
+  type : 'string',
+  value : '',
+  description : 'Directory with the DOS game files (OLD.COM, *.CAT, ...). Empty = the tests that need the game are not registered.',
+)
+
+option('oracleTests',
+  type : 'boolean',
+  value : false,
+  description : 'Register the oracle comparison suites (need the captures in $SOTS_WORKSPACE/oracle, default ~/sotsdec)',
+)

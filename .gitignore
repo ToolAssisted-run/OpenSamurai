@@ -1,0 +1,19 @@
+# game data is never committed
+*.DAT
+*.dat
+*.EXE
+*.exe
+*.COM
+*.com
+*.CAT
+*.SAM
+*.MEL
+*.PIC
+*.SCL
+*.CLK
+*.bin
+*.img
+*.pdf
+build*/
+tools/__pycache__/
+extern/*/

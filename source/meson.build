@@ -1,0 +1,17 @@
+# The reconstructed game as one library. It is linked whole so that routines a test or the frontend
+# replaces (weak defaults) behave as if every source were compiled into the program.
+opensamuraiSources = files(
+  'catalog.c',
+)
+
+opensamuraiIncludes = include_directories('.')
+
+opensamuraiLib = static_library('opensamurai', opensamuraiSources,
+  c_args : commonCompileArgs,
+  include_directories : opensamuraiIncludes,
+)
+
+opensamuraiDependency = declare_dependency(
+  link_whole : opensamuraiLib,
+  include_directories : opensamuraiIncludes,
+)
