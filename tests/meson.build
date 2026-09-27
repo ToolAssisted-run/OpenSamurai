@@ -4,6 +4,7 @@
 testPrograms = {
   'cattest' : 'the resource catalogs: every entry of every catalog accounted for',
   'dueltest' : 'the duel against captures of the real game, frame by frame',
+  'battletest' : 'the battle against captures of the real game, step by step',
 }
 
 testExecutables = {}

@@ -115,6 +115,28 @@ top of each iteration) sampling the whole data segment, and one at 1000:0A3E (wh
 virtual joystick, DS:22F2-22F5); the loop's locals are on the stack at the loop's frame pointer DS:6BDA.
 The workspace's oracle/gen_duel.py makes the scripts.
 
+### 5.2 The battle (BATTLE.EXE) — simulation reconstructed in source/battle.c, verified
+
+One step of the battle loop in main (1000:00A2-010F) runs every 17 video frames (its own INT 8 timer,
+locked to the refresh as in the duel), about 4 steps per second. Units are rotated rectangles of 1-8
+figures (64-byte records at DS:5E2A; positions in 1/16 pixel, angles in 1/65536 turn) over two 84x54 grids
+of 4x4-pixel cells: the terrain (streams, slopes, marsh, woods, castle) and a visibility map rebuilt every
+step from the units' footprints, through which the units cast rays to see each other. Each step: the
+drawing pass (which also sets each unit's terrain modifier and speed and removes units that left the
+field), then five passes over the records (state handlers, damage, morale, morale modifiers, rout/rally),
+each followed by a call of the input handler, then the wait. Both sides run the same autonomous logic;
+the player only gives orders (select 1-9 / 0 nearest / Enter under the cursor, then + or = turn and march,
+- march without turning, * turn in place; R retreat) and the enemy's general only chooses the formation.
+The geometry is 16-bit fixed point: a 257-entry sine table with interpolation, an octant-polynomial atan2,
+Newton square roots, an approximate distance.
+
+Verification: tests/battletest.c against 96 random captures of the two battle encounters (all
+difficulties, random formation choices and random orders): 63,535 steps identical in every unit field,
+the visibility map, the random seed and the order state, both step by step and free-running from the
+first step. Captures: the whole data segment at 1000:00A9 (the top of each step), every consumed key at
+1000:3935 (ax) and the pass boundaries at 1000:0170. Not yet covered by captures: musketeers, castles
+(both only appear in the role-playing game's battles).
+
 ## 6. Methods
 
 The oracle is the real game in DOSBox-X headless (Chimera's core with the tracer branch, as for SDLPoP2).
@@ -156,6 +178,7 @@ F-keys not at all; decoded with the workspace's work/jrsrkeys.py.
 
 ## 8. Log
 
+- 2026-09-27: the battle's simulation reconstructed and verified against 96 captures (63,535 steps).
 - 2026-09-27: the duel's simulation reconstructed and verified against 64 captures (211 duels).
 
 - 2026-09-27: files inventoried, launcher protocol read, all programs and drivers unpacked and decompiled,
