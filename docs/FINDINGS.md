@@ -147,6 +147,57 @@ tables (variant by rank and army size; the player's army is the table turned rou
 against 64 captures (the formation screen's data segment, the seed sampled at 1000:51DE, and the first
 step): terrain, random numbers, enemy formation, candidate armies and placed armies identical.
 
+### 5.3 The melee (MELEE.EXE) — reconstructed in source/melee_core.c over its data segment
+
+MELEE keeps its whole state in parallel arrays at fixed places of its data segment: 7 entities (0 = the
+player), 154 cells per floor (11 x 14, 7 bytes each, three floors at a stride of 180 cells: discovered,
+two wall bytes, room id...), 77 x 98 collision tiles of 4 x 4 pixels, objects, corpses, and 77 countdown
+timers (DS:0058, 11 groups of 7 words). Its INT 8 hook reprograms the PIT to 60 Hz and counts ticks at DS:0053;
+the main loop (1000:006A-00A7) runs unthrottled (about 21 passes per tick in the oracle) and each pass
+decrements every timer once per tick elapsed since the previous pass (1000:3BB8 / 07C2). All pacing
+(movement, attacks, AI, reinforcements) is in those timers. Castles are built from 14 hand-made half-floor
+templates seeded from the shared block (a castle keeps its layout between visits); villages and paddies
+are random. The fog is per cell, with a whole room revealed when the player enters it. A CPU speed test at
+start (1000:0708: fewer than 15,000 empty loops in 0.25 s) makes a "slow machine" melee (2-pixel steps, at
+most 2 enemies at once); the oracle and the reconstruction are the fast case.
+
+The reconstruction is the Ghidra decompilation translated mechanically into C over an image of that data
+segment (the workspace's work/ghidra2c.py; the image's byte order, aliasing and 16-bit wrap-around are the 8086's), then
+corrected by hand where the decompiler was wrong, each correction marked FIX. The classes of error found:
+
+- bytes widened the wrong way: 14 functions return AL zero-extended (`sub ah,ah`) and 18 take byte
+  parameters they zero-extend, all of which Ghidra typed `i8`, sign-extending cell numbers above 127 (found by
+  the workspace's work/audit_ret.py and audit_params.py);
+- arguments Ghidra lost, pushed before an inner call whose result is the next argument (22 calls, e.g.
+  `f(g(x), y)` with y pushed first), and one tile type computed as `rand(2) + 1` whose `+ 1` it dropped;
+- results Ghidra lost: computed into AX after the last call (1000:8A88, the tile of a cell's centre), or the
+  value of a call in each branch (1000:7C84 turn, 4BA4 cell; work/audit_ax.py lists the functions whose
+  assembly leaves a value in AX that a caller then uses);
+- calls made without their arguments, whose callee then reads the caller's stack: 1000:50C6 calls 5222
+  (pick a free cell for a reinforcement) with nothing pushed, so its "whole floor" flag is whatever the only
+  path to it left in that stack word: the 100 that 1000:1726 pushes when the alarm is off, the cell counter of
+  1000:4D4E in mission type 0x15, else the random remainder 1000:4E3E drew just before (recoverable from
+  DS:9D8E); and 1000:8040 calls 8014 with the caller's saved SI, which is its own entity argument;
+- the shared block: the program reaches it through a far pointer (DS:AE54, offset 0, segment from 0000:04F0),
+  which the translation took for an offset into the data segment; its 51 accesses are SH8/SH16 (the block);
+- the drivers: the MISC keyboard slot 90 answers 0 when a key is waiting, so the command-key poll
+  (1000:BC52: Alt-Q, Alt-J, Alt-V, Space pause) is a FIX with no keys; the controls come from the host
+  (DS:398C-398F, as the INT 9 hook leaves them) where the loop reads them (1000:9F8A direction, 9F4E fire).
+
+Verification: tests/meleetest.c against captures that sample the whole data segment at every timer
+decrement (1000:07C2, i.e. once per elapsed tick, with the instruction count), and the shared block, plus
+every control read and every srand(). The samples of one pass form a group; the test resumes at a group's first decrement, finishes
+that pass, runs the passes without a tick in between and starts the next pass up to its first decrement,
+where it compares the whole segment except the interrupt handlers' own bytes (DS:398C-3995, 46AA-46CA), and
+the shared block.
+The mismatches were found with an instruction trace of the real game over the group (the oracle's `trace`)
+reduced to the functions entered, compared with the C's own entries (each translated function calls
+FN(address)), plus write watches on the first differing byte on both sides (the workspace's oracle/gtrace.sh).
+
+Result: 48 captures (both encounters, "Outpost of Ishiyama Hongan-ji" and "Bodyguard vs the Gamblers", all
+four difficulties, random directions and attacks from the start of the melee), 129,352 ticks, identical in
+the whole data segment and the shared block, tick by tick and free-running from the first tick of each run.
+
 ## 6. Methods
 
 The oracle is the real game in DOSBox-X headless (Chimera's core with the tracer branch, as for SDLPoP2).
@@ -188,6 +239,7 @@ F-keys not at all; decoded with the workspace's work/jrsrkeys.py.
 
 ## 8. Log
 
+- 2026-09-27: the melee translated over its data segment and corrected until it matched its captures.
 - 2026-09-27: the battle's simulation reconstructed and verified against 96 captures (63,535 steps).
 - 2026-09-27: the duel's simulation reconstructed and verified against 64 captures (211 duels).
 

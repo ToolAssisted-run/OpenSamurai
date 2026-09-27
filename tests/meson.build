@@ -5,6 +5,7 @@ testPrograms = {
   'cattest' : 'the resource catalogs: every entry of every catalog accounted for',
   'dueltest' : 'the duel against captures of the real game, frame by frame',
   'battletest' : 'the battle against captures of the real game, step by step',
+  'meleetest' : 'the melee against captures of the real game, tick by tick',
   'battlesetuptest' : 'the battlefield, the enemy formation and the armies against captures',
 }
 

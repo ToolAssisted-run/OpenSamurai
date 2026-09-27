@@ -1,0 +1,56 @@
+// Support for the modules reconstructed over an image of their original data segment (the melee, and
+// the programs of the role-playing game): the original's 16-bit types, pointers into the image, and the
+// helpers the decompilation of 16-bit code needs. One image is active at a time (g_ds), as one program
+// was loaded at a time.
+#ifndef OPENSAMURAI_DSIMAGE_H
+#define OPENSAMURAI_DSIMAGE_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "shared.h"
+
+typedef uint8_t u8;
+typedef int8_t i8;
+typedef uint16_t u16;
+typedef int16_t i16;
+typedef uint32_t u32;
+typedef int32_t i32;
+typedef uint64_t u64;
+// element types of pointers into the image (any alignment, any aliasing, as on the 8086)
+typedef uint8_t __attribute__((may_alias)) u8a;
+typedef int8_t __attribute__((may_alias)) i8a;
+typedef uint16_t __attribute__((may_alias, aligned(1))) u16a;
+typedef int16_t __attribute__((may_alias, aligned(1))) i16a;
+typedef uint32_t __attribute__((may_alias, aligned(1))) u32a;
+typedef int32_t __attribute__((may_alias, aligned(1))) i32a;
+
+extern uint8_t *g_ds;  // the active data segment image (64 KB)
+#define DSP(x) (g_ds + (u16)(x))
+#define P8(x) ((u8a *)DSP(x))
+#define PS8(x) ((i8a *)DSP(x))
+#define P16(x) ((u16a *)DSP(x))
+#define PS16(x) ((i16a *)DSP(x))
+#define P32(x) ((u32a *)DSP(x))
+#define PS32(x) ((i32a *)DSP(x))
+// the shared block, which the programs reach through a far pointer (offset 0)
+#define SHP(x) (shared.b + (u16)(x))
+#define SH8(x) ((u8a *)SHP(x))
+#define SHS8(x) ((i8a *)SHP(x))
+#define SH16(x) ((u16a *)SHP(x))
+#define SHS16(x) ((i16a *)SHP(x))
+#define SH32(x) ((u32a *)SHP(x))
+#define SHS32(x) ((i32a *)SHP(x))
+#define CONCAT11(a, b) ((u16)((((u16)(u8)(a)) << 8) | (u8)(b)))
+#define CONCAT22(a, b) ((u32)((((u32)(u16)(a)) << 16) | (u16)(b)))
+#define CONCAT12(a, b) ((u32)((((u32)(u8)(a)) << 16) | (u16)(b)))
+
+// driver calls (graphics, sound, joystick): nothing the simulation depends on
+static inline u16 drv_(int dummy, ...) { (void)dummy; return 0; }
+#define DRV(...) drv_(0, ##__VA_ARGS__)
+
+// the BIOS data area words the programs read (0000:04F0 = the shared block segment)
+extern u16 g_bios[0x300];
+#define BIOS16(a) (*(u16a *)((u8 *)g_bios + (a)))
+
+#endif
