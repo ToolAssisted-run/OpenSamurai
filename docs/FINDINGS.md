@@ -198,6 +198,39 @@ Result: 48 captures (both encounters, "Outpost of Ishiyama Hongan-ji" and "Bodyg
 four difficulties, random directions and attacks from the start of the melee), 129,352 ticks, identical in
 the whole data segment and the shared block, tick by tick and free-running from the first tick of each run.
 
+### 5.4 The role-playing game (RP.EXE) — recompiled in source/rp_core.c, verification in progress
+
+RP is a medium-model program (26 code segments, one data segment: DS:0000-5BBF data, 5BC0-8F5F game state,
+8F60-975F the stack) that reaches the shared block through a far pointer (DS:8540) and runs its sub-games by
+hibernating: 23bb:0222 saves its data segment into the picture buffer (168c:00CA), exits with the sub-game's
+code, and when the launcher runs it again, main restores it (168c:00EE) and continues after the save.
+
+Ghidra's decompilation of RP is unusable in many places even after its library routines were given their
+prototypes and every function's parameters were committed (work/ApplySigs.java, CommitParams.java): jump
+tables, functions whose results or arguments go through registers, varargs message functions that walk their
+stack arguments, stack variables it cannot place, assembly routines that pop their own return address. So RP
+is **recompiled from its machine code** (the workspace's work/asm2c.py): every function becomes C over emulated
+8086 registers (source/asm2c.h), the data segment image and the stack inside it, statement for statement,
+decoded by recursive descent (tables inside the code are not taken for instructions; jump tables become
+switches). Calls between recompiled functions keep the original's stack exactly -- the arguments as pushed, the
+real return address -- so every stack address the program stores, and every stale stack word it reads, is the
+original's. The translated C (work/ghidra2c.py) is kept beside it for the functions where it is right, and is
+to replace the recompiled code function by function where the captures still pass.
+
+Not recompiled: the MS C run-time library (strings, long arithmetic, rand at DS:34FC, files on the game
+directory, DOS memory as DOS's own first-fit arena so that buffers get the segments they got in the real game),
+the picture decoder (2965, a stack-switching coroutine: written in C with the original's state in the data
+segment), AllocBuffer and friends (29fd), the delay (29f7:0048). The graphics driver (MGRAPHIC.EXE) is
+recompiled whole, as one function with a dispatch for returns (its routines pop their own return addresses and
+jump into each other's epilogues): source/mgraphic.c, over its own segments, as loaded in the oracle.
+
+Verification: tests/rptest.c against captures of the main loop's tick (106a:0048): the data segment, the shared
+block and all of conventional memory, plus every time() result, key poll and key read, frame wait (with the bytes
+the interrupt handlers keep) and srand() in execution order, which the C must ask for in the same order. The
+captures are driven by random menu keys from a new game (the workspace's oracle/gen_rp.py). Divergences are found
+by comparing the functions entered and the events served with the real game's instruction trace, filtered
+through a FIFO (oracle/rtrace.sh).
+
 ## 6. Methods
 
 The oracle is the real game in DOSBox-X headless (Chimera's core with the tracer branch, as for SDLPoP2).
