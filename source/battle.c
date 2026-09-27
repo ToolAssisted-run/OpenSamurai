@@ -1293,6 +1293,15 @@ static int battle_over(S *b)
   return 0;
 }
 
+void battle_setup_frame(S *b)
+{
+  memset(b->visible, 0, sizeof b->visible);
+  for (int i = 1; i <= b->units; i++) b->u[i].terrainMod = 0;
+  for (int i = 1; i <= b->records; i++)
+    if (b->u[i].state != 0) unit_pass(b, &b->u[i]);
+  render_logic(b);
+}
+
 int battle_step(S *b, const BattleKeys *keys)
 {
   memset(b->visible, 0, sizeof b->visible);

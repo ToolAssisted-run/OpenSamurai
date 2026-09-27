@@ -146,8 +146,28 @@ typedef struct
   struct { int pass; uint16_t key; } k[64];  // pass 0-4: after that unit pass; 5: while waiting
 } BattleKeys;
 
-// Terrain generation from the seed (the BIOS tick count), 1000:51DE (battle_terrain.c)
+// What the battle reads from the shared block (1000:01FE)
+typedef struct
+{
+  int battleType;         // +5A: 4, 7, 9 the player defends; 0, 5, 6 castle on the enemy's edge, 4 on the player's
+  int rank;               // +38: 1 samurai, 2 hatamoto, 3 daimyo
+  int playerSize, enemySize;              // +64, +66 (1..128)
+  int playerGeneralship, enemyGeneralship; // +6C, +6E (1..128)
+  int difficulty;         // +36: 0..3
+  int cga;                // +22 == 0
+  int soundMode;          // +310
+} BattleParameters;
+
+// The set-up (battle_setup.c): parameters, the battlefield from its seed (the BIOS tick count, 1000:51DE),
+// the enemy general's formation (1000:3E52, 0 = every candidate rejected: generate again with a new seed),
+// the armies for the chosen formations (1000:3EF0), the formation choice keys (1000:3D68, 1 = confirmed)
+void battle_read_parameters(BattleState *b, const BattleParameters *p);
 void battle_generate_terrain(BattleState *b, uint32_t seed);
+int battle_choose_enemy_formation(BattleState *b);
+void battle_place_armies(BattleState *b);
+int battle_setup_key(BattleState *b, uint16_t key);
+// The unit pass of the formation screen (the visibility map and the units' pass effects)
+void battle_setup_frame(BattleState *b);
 
 // One simulation step (the body of the battle loop in main, 1000:00A2-010F) with the keys the input
 // handler consumed during it. Returns 1 when the battle is over.

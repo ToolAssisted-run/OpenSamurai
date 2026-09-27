@@ -137,6 +137,16 @@ first step. Captures: the whole data segment at 1000:00A9 (the top of each step)
 1000:3935 (ax) and the pass boundaries at 1000:0170. Not yet covered by captures: musketeers, castles
 (both only appear in the role-playing game's battles).
 
+The set-up (source/battle_setup.c): the parameters from the shared block (+5A battle type, +38 rank,
++64/+66 army sizes, +6C/+6E generalship, +36 difficulty), the battlefield generator (seeded with the BIOS
+tick count: a stream from one edge, 14/16 px per step with changing curvature, at most one tributary,
+slopes along its banks, drying up into a marsh; woods grown from a random seed point; a castle block),
+the enemy general's formation choice (each of the six candidates scored by the terrain under its figures,
+cavalry in a marsh rejects it; all rejected: generate again) and the army placement from the formation
+tables (variant by rank and army size; the player's army is the table turned round). tests/battlesetuptest.c
+against 64 captures (the formation screen's data segment, the seed sampled at 1000:51DE, and the first
+step): terrain, random numbers, enemy formation, candidate armies and placed armies identical.
+
 ## 6. Methods
 
 The oracle is the real game in DOSBox-X headless (Chimera's core with the tracer branch, as for SDLPoP2).
