@@ -94,7 +94,26 @@ to be worked out from the drivers.
 
 ## 5. Mechanics
 
-To be filled from the program analyses (the workspace's reports/).
+### 5.1 The duel (DUEL.EXE) — reconstructed in source/duel.c, verified
+
+One iteration of the duel loop (1000:0594) is one game frame: the loop waits for 7 ticks of its own INT 8
+timer, which it locks to the video refresh (70.086 Hz on VGA), so the duel runs at 10 frames per second.
+Both fighters run one animation state machine: 133 states of 24 bytes (DS:0A8C: sprites, hold time, sprite
+offsets, an "auto" transition taken while the sword button is held or released, and a next state for each
+of the 9 controller directions). Movement happens when a state is entered (the move table DS:1704,
+mirrored for the opponent). The opponent's AI (a 30-row response table at DS:17B2 keyed by the player's
+state seen through a random reaction delay, the lane and a random mode re-rolled every 16 frames) picks a
+target state and then the controls that reach it; skill 0..7 sets the reaction delay, a telegraph pause
+before its swings, the aggression and periodic windows in which it won't parry. Impacts resolve against the
+defender's guard side and the 16-pixel lane; an over-the-shoulder swing can't be parried and wounds twice
+half of the time; four wounds and the fighter falls. Random numbers: MS C `rand()`, seeded with `time()`.
+
+Verification: tests/dueltest.c against 64 random captures (encounter "Kenjutsu training" / "Musashi vs
+Kojiro", all four difficulty levels): 89,273 frames in 211 duels, identical in every carried-over field
+both frame by frame and free-running from each duel's first frame. Captures: a probe at 1000:20A4 (the
+top of each iteration) sampling the whole data segment, and one at 1000:0A3E (where the loop reads the
+virtual joystick, DS:22F2-22F5); the loop's locals are on the stack at the loop's frame pointer DS:6BDA.
+The workspace's oracle/gen_duel.py makes the scripts.
 
 ## 6. Methods
 
@@ -109,6 +128,26 @@ title (~2300-3500) → Career Choices (~4400) → enter (New Game) → name, let
 Shimazu by default) enter → difficulty (Tanto) enter → family advantage (Swordsmanship) enter → RP.EXE
 ("Lord Kiyosuke, the hatamoto whom you will serve...") at ~7100.
 
+The oracle is deterministic: two runs of the same script give identical screens and identical RAM after
+13,600 frames (rp1.script: welcome text, the rivals' introductions, the home scroll, "Equip more samurai",
+the rivals' news). RP's opening: "Lord Kiyosuke, the hatamoto whom you will serve, welcomes you..." → one
+screen per rival ("Toshiro is a samurai of great renown. He controls a large fief, and commands 36 warriors;
+he is known throughout the province as a samurai of commendable honor.") → the scroll "Considering the
+situation, you decide to: Equip more samurai. / Practice kenjutsu. / Drill your troops. / Donate land to the
+local Buddhist temple. / Raise the rice tax within your domain. / Travel."
+
+While RP idles on a screen, only these bytes of its data segment change (RAM dumps 20-100 frames apart):
+DS:3038-303C (five bytes, every sample), DS:3041, DS:3048 (a counter, +1 every ~20 frames), DS:304C (+1
+every ~36 frames), DS:3056 (a 0/1 toggle), and the stack around DS:963C-96A0. The BIOS tick 0040:006C runs.
+
+Timing: no program hooks INT 1Ch. RP reads the BIOS keyboard buffer (0040:001A/1C) itself and uses the
+BIOS tick for key auto-repeat. DUEL (and presumably MELEE and BATTLE) hooks INT 8 and reprograms PIT
+channel 0, restoring 18.2 Hz (count 0) at exit.
+
+The published TAS (M6401, JPC-rr, 697 s of input, 2165 key presses) uses Enter (760), the arrows and the
+keypad diagonals 7/9/1/3, keypad + - * and the digits 1-4 (battle unit orders), Backspace (duel parry),
+F-keys not at all; decoded with the workspace's work/jrsrkeys.py.
+
 ## 7. Open
 
 - The picture, font, map and window formats.
@@ -116,6 +155,8 @@ Shimazu by default) enter → difficulty (Tanto) enter → family advantage (Swo
 - What `SAMURAI.CLK` (3780 bytes) is: no program names it; possibly part of the RawCopy patch.
 
 ## 8. Log
+
+- 2026-09-27: the duel's simulation reconstructed and verified against 64 captures (211 duels).
 
 - 2026-09-27: files inventoried, launcher protocol read, all programs and drivers unpacked and decompiled,
   oracle boots and plays a new game under script, catalog format verified.
