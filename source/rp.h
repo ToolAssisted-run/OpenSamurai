@@ -5,6 +5,7 @@
 #ifndef OPENSAMURAI_RP_H
 #define OPENSAMURAI_RP_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #define RP_DS_SIZE 0x10000
@@ -22,10 +23,13 @@ typedef struct
   void (*seeded)(void *ctx, uint16_t seed);  // srand() was called
   uint16_t (*biosTicks)(void *ctx);          // the BIOS tick count (the random seed at start-up)
   void (*exit)(void *ctx, int code);         // exit(): does not return
-  // a sub-game (1 duel, 2 battle, 3 melee) with the parameters in the shared block, which it leaves its results in
+  // a sub-game (1 duel, 2 battle, 3 melee) with the parameters in the shared block, which it leaves its results in;
+  // with restart, it does not return: the host runs RP again from main (rp_main), whose resume (RestoreContext)
+  // goes back to where RP hibernated
   void (*subgame)(void *ctx, int code);
   const char *gameDir;                       // the game's files
   void *ctx;
+  bool restart;  // the host restarts RP after a sub-game (see subgame); else RP resumes at once (the tests)
 } RpHost;
 
 // Use this data segment image (RP_DS_SIZE bytes) and host for the calls below; dsSeg and sharedSeg are the
@@ -41,6 +45,9 @@ void rp_arena_from_memory(uint16_t from, uint16_t to);
 // ageing, events. regs: SP BP SI DI ES AX BX CX DX there (the loop keeps nothing in SI and DI, but the program
 // pushes them before it sets them: their values stay in the stack); SP is DS:9736 once the game runs
 void rp_tick(const uint16_t regs[9]);
+
+// The program ended: its files closed (DOS closes them)
+void rp_close_files(void);
 
 // RP from main (1000:0000) as the C library's start-up calls it (regs as rp_tick's: its far return address and
 // main's arguments on the stack), until exit()

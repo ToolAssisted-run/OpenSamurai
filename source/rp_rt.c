@@ -126,7 +126,7 @@ void rp_exit(i16 code)
 {
   if (code >= 1 && code <= 3 && rp_resumeArmed && host && host->subgame)
   {
-    host->subgame(host->ctx, code);
+    host->subgame(host->ctx, code);  // (with restart it does not return)
     dos_free_owner(RP_PSP);  // RP ended (DOS freed its blocks) and runs again (it allocates them anew)
     RestoreContext(contextSeg);
     longjmp(rp_resume, 1);
@@ -177,6 +177,12 @@ i16 _dos_open(i16 name, i16 mode, i16 ph)
     }
   fclose(f);
   return 4;
+}
+
+void rp_close_files(void)
+{
+  for (int h = 0; h < 20; h++)
+    if (files[h].f) fclose(files[h].f), files[h].f = NULL;
 }
 
 i16 _dos_close(i16 h)
@@ -310,9 +316,12 @@ void SaveContext(u16 seg)
   *(u16a *)far_ptr(seg, 0) = g_sp;
 }
 
+// the resume (168c:00EE, from main when shared+2C says RP hibernated): the data segment back, and on where it
+// hibernated (the host's C stack still has it: the sub-game and this run of RP ran inside RP's exit)
 void RestoreContext(u16 seg)
 {
   for (u16 k = 0; k < 0x9760; k++) *P8(k) = *far_ptr(seg, (u16)(4 + k));
+  if (host && host->restart && rp_resumeArmed) longjmp(rp_resume, 1);
 }
 i16 NotOriginalDisk(void) { return 0; }
 void DosPrint(i16 s) { (void)s; }

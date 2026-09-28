@@ -8,16 +8,34 @@
 #include <string.h>
 
 #include "asm2c.h"
+#include "dos.h"
 #include "dosmem.h"
 #include "exe.h"
 #include "shared.h"
 #include "start.h"
 #include "rp.h"
+#include "duelexe.h"
 
 #include <setjmp.h>
 #include <time.h>
 
 static const GameHost *host;
+
+// the BIOS's keyboard buffer: the host's keys, with one taken ahead for a look (INT 16h/01)
+static bool keyAhead;
+static uint16_t keyAheadValue;
+static bool key_waiting(void) { return keyAhead || (host->keyWaiting && host->keyWaiting(host->ctx)); }
+static uint16_t key_peek(void)
+{
+  if (!keyAhead && host->keyWaiting && host->keyWaiting(host->ctx)) keyAheadValue = host->readKey(host->ctx), keyAhead = true;
+  return keyAhead ? keyAheadValue : 0;
+}
+static uint16_t key_read(void)
+{
+  uint16_t k = key_peek();
+  keyAhead = false;
+  return k;
+}
 
 static void w16(uint16_t seg, uint16_t off, uint16_t v)
 {
@@ -140,6 +158,7 @@ static bool program_load(const char *name, ExeInfo *e)
 // the program ends: DOS frees its blocks and puts back INT 22h-24h from its PSP
 static void program_end(void)
 {
+  dos_close_all();
   dos_free_owner(GAME_PSP_SEG);
   memcpy(far_ptr(0, 0x88), far_ptr(GAME_PSP_SEG, 0x0A), 12);
 }
@@ -209,7 +228,7 @@ static uint32_t start_dos(void *ctx, int ah)
   clock_now(&c, NULL);
   if (ah == 0x2A) return (uint32_t)c.year << 16 | (uint32_t)c.month << 8 | (uint32_t)c.day;
   if (ah == 0x2C) return (uint32_t)(c.hour << 8 | c.minute) << 16 | (uint32_t)(c.second << 8 | c.hundredths);
-  if (ah == 0x0B) return host->keyWaiting && host->keyWaiting(host->ctx) ? 0xFF : 0;
+  if (ah == 0x0B) return key_waiting() ? 0xFF : 0;
   return 0;
 }
 
@@ -220,10 +239,10 @@ static uint16_t start_input(void *ctx, int slot)
   {
   case 90:  // a key waiting
     poll(false);
-    return host->keyWaiting && host->keyWaiting(host->ctx) ? 0 : 0xFFFF;
+    return key_waiting() ? 0 : 0xFFFF;
   case 91:  // the next key: the program waits for it
-    while (!(host->keyWaiting && host->keyWaiting(host->ctx))) frame();
-    return host->readKey(host->ctx);
+    while (!key_waiting()) frame();
+    return key_read();
   default:  // no joystick
     return 0;
   }
@@ -282,6 +301,7 @@ static int run_start(void)
 
 static void clock_now(GameClock *c, uint32_t *biosTicks);
 
+
 // ---------------------------------------------------------------- the keyboard hooks
 
 // RP (and the action games) hook INT 9 with a handler that turns the direction keys into a joystick: Enter and
@@ -294,6 +314,7 @@ typedef struct
   uint8_t center;
 } KeyJoystick;
 static const KeyJoystick rpKeys = { 0x2E58, 0x0DA8, 0x339A, 0x339B, 0x339C, 0x339D, 0x339E, 0x339F, 0x33A1, 0x33A2, 0x33A3, 0x33A4, 0 };
+static const KeyJoystick duelKeys = { 0x2DB2, 0x0080, 0x22F2, 0x22F3, 0x22F4, 0x22F5, 0x22F6, 0x22F7, 0x22F9, 0x22FA, 0x22FB, 0x22FC, 0x80 };
 static const KeyJoystick *keyHook;
 static uint16_t keyDs;
 
@@ -372,14 +393,14 @@ static int rp_key_waiting(void *ctx)
 {
   (void)ctx;
   poll(false);
-  return host->keyWaiting && host->keyWaiting(host->ctx);
+  return key_waiting();
 }
 
 static uint16_t rp_read_key(void *ctx)
 {
   (void)ctx;
   while (!rp_key_waiting(NULL)) frame();
-  return host->readKey(host->ctx);
+  return key_read();
 }
 
 // a frame wait (DS:3038): the next video frame (the timer handler counts it: RP's 168c:091C, while DS:303F says
@@ -399,16 +420,17 @@ static void rp_timer_frame(void)
 
 static uint16_t rp_bios_ticks(void *ctx) { return bios_ticks(ctx); }
 
-static void rp_subgame(void *ctx, int code)
-{
-  (void)ctx;
-  fprintf(stderr, "opensamurai: the %s is not in the reconstruction yet; it is skipped\n", code == 1 ? "duel" : code == 2 ? "battle" : "melee");
-}
+static void rp_subgame(void *ctx, int code);
 
-static int run_rp(void)
+// RP loaded and started from main (its start-up's effects in C); main does not return (exit longjmps to rpExit)
+static void rp_start(void)
 {
   ExeInfo e;
-  if (!program_load("RP.EXE", &e)) return -1;
+  if (!program_load("RP.EXE", &e))
+  {
+    exitCode = -1;
+    longjmp(rpExit, 1);
+  }
   // the C library's start-up (RP's is not reconstructed), as it leaves the data segment: the uninitialized data
   // zeroed, the heap and stack limits, the divide-error vector it saves and replaces, the PSP, DOS's version,
   // the standard handles (devices)
@@ -427,17 +449,128 @@ static int run_rp(void)
   w16(RP_DS, 0x9754, 0x00B2), w16(RP_DS, 0x9756, 0x37FA);
   w16(RP_DS, 0x9758, 0), w16(RP_DS, 0x975A, 0), w16(RP_DS, 0x975C, 0);
   static const uint16_t regs[9] = { 0x9754, 0, 0x396A, 0x396A, GAME_ENV_SEG, 0x80D3, 0xFFFF, 0x7FE5, 0x80D3 };
-  static RpHost rh = { rp_time_, rp_key_waiting, rp_read_key, rp_frame_poll, NULL, rp_bios_ticks, rp_exit_, rp_subgame, NULL, NULL };
+  static RpHost rh = { rp_time_, rp_key_waiting, rp_read_key, rp_frame_poll, NULL, rp_bios_ticks, rp_exit_, rp_subgame, NULL, NULL, true };
   rh.gameDir = host->gameDir;
   g_dsSeg = 0;
   rp_attach(far_ptr(RP_DS, 0), RP_DS, GAME_SHARED_SEG, &rh);
   keyHook = &rpKeys;
   keyDs = RP_DS;
-  exitCode = -1;
   timerFrame = rp_timer_frame;
-  if (!setjmp(rpExit)) rp_main(regs);
-  timerFrame = NULL;
+  rp_main(regs);
+}
+
+// ---------------------------------------------------------------- DUEL.EXE
+
+static int duelCode;
+static void duel_exit_(void *ctx, int code)
+{
+  (void)ctx;
+  duelCode = code;
+}
+
+static uint32_t duel_answer(void *ctx, int what)
+{
+  (void)ctx;
+  switch (what)
+  {
+  case 0x2A:
+  case 0x2C:
+  case 0x0B:
+    return start_dos(NULL, what);
+  case 0x07:  // DOS's console input: the next character
+  case 0x08:
+  case 0x1600:  // the BIOS's: the next key
+    while (!key_waiting()) frame();
+    return what == 0x1600 ? key_read() : (uint32_t)(key_read() & 0xFF);
+  case 0x1601:  // a key waiting: which (bit 16, ZF, if none)
+    poll(false);
+    return key_waiting() ? key_peek() : 0x10000;
+  case 0x1100:  // the equipment: two floppy drives, a colour display
+    return 0x4421;
+  case 0x1A00:
+  {
+    GameClock c;
+    uint32_t t;
+    poll(false);
+    clock_now(&c, &t);
+    return t;
+  }
+  case 90:
+    poll(false);
+    return key_waiting() ? 0 : 0xFFFF;
+  case 91:
+    while (!key_waiting()) frame();
+    return key_read();
+  default:  // no joystick
+    return 0;
+  }
+}
+
+// the frame wait: the next frame (the timer's callback 1000:20AA counts it while INT 8 is DUEL's 1533:01FD)
+static void duel_frame_poll(void *ctx)
+{
+  (void)ctx;
+  frame();
+}
+
+static void duel_timer_frame(void)
+{
+  if (*(uint16_t *)far_ptr(0, 0x20) != 0x01FD || *(uint16_t *)far_ptr(0, 0x22) != 0x2CFF) return;
+  uint16_t *ticks = (uint16_t *)far_ptr(DUEL_DS, 0x22C2), *down = (uint16_t *)far_ptr(DUEL_DS, 0x22C4);
+  (*ticks)++;
+  if (*down) (*down)--;
+}
+
+static int run_duel(void)
+{
+  ExeInfo e;
+  if (!program_load("DUEL.EXE", &e)) return -1;
+  static DuelHost dh = { duel_answer, duel_frame_poll, NULL, duel_exit_, NULL, NULL };
+  dh.gameDir = host->gameDir;
+  g_dsSeg = 0;
+  duel_attach(far_ptr(DUEL_DS, 0), GAME_SHARED_SEG, &dh);
+  keyHook = &duelKeys;
+  keyDs = DUEL_DS;
+  timerFrame = duel_timer_frame;
+  duelCode = -1;
+  duel_entry(GAME_PSP_SEG, e.ss, e.sp);
   keyHook = NULL;
+  timerFrame = NULL;
+  dos_close_all();
+  program_end();
+  return duelCode;
+}
+
+// ---------------------------------------------------------------- RP and its sub-games
+
+// RP exits for a sub-game after hibernating (its data segment in the picture buffer): the launcher runs the
+// sub-game, then RP again, whose main finds the hibernation and resumes (RestoreContext goes back into the
+// first run's C stack: this does not return)
+static void rp_subgame(void *ctx, int code)
+{
+  (void)ctx;
+  keyHook = NULL;
+  timerFrame = NULL;
+  rp_close_files();
+  program_end();
+  int r = 1;
+  if (code == 1) r = run_duel();
+  else fprintf(stderr, "opensamurai: the %s is not in the reconstruction yet; it is skipped\n", code == 2 ? "battle" : "melee");
+  if (r == 0)  // the player quit (Alt-Q)
+  {
+    exitCode = 0;
+    longjmp(rpExit, 1);
+  }
+  rp_start();
+}
+
+static int run_rp(void)
+{
+  exitCode = -1;
+  if (!setjmp(rpExit)) rp_start();
+  keyHook = NULL;
+  timerFrame = NULL;
+  rp_close_files();
   program_end();
   return exitCode;
 }
