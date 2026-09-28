@@ -20,7 +20,23 @@ static int keyHead, keyTail;
 // for scripted runs: OPENSAMURAI_KEYS="FRAME:KEY ..." (KEY hexadecimal, the BIOS's), OPENSAMURAI_SHOTS="FRAME ..."
 // (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting
 static long frameCount, lastFrame = -1;
-static const char *scriptKeys, *scriptShots;
+static const char *scriptKeys, *scriptShots, *scriptScans;
+// OPENSAMURAI_SCANS="FRAME:+SS FRAME:-SS ..." (SS the PC's scan code, hexadecimal; +e/-e for the grey keys): the
+// keyboard's make and break codes, for the programs that read the keyboard themselves
+static void scans(long n)
+{
+  for (const char *p = scriptScans; p && *p;)
+  {
+    char *q;
+    long f = strtol(p, &q, 10);
+    if (q == p || *q != ':') break;
+    bool press = q[1] == '+', ext = q[2] == 'e';
+    unsigned sc = (unsigned)strtoul(q + 2 + ext, &q, 16);
+    if (f == n) game_key((uint8_t)sc, ext, press);
+    p = q;
+    while (*p == ' ') p++;
+  }
+}
 static bool fast;
 
 // the BIOS's key (scan code << 8 | ASCII, as INT 16h/00 gives it) for an SDL key, 0 for none
@@ -191,6 +207,7 @@ static void present(void *ctx)
     keys[keyTail] = (uint16_t)k;
     keyTail = (keyTail + 1) % 64;
   }
+  scans(frameCount);
   if (listed(scriptShots, frameCount, NULL))
   {
     shot(frameCount);
@@ -282,6 +299,7 @@ int main(int argc, char **argv)
   }
   scriptKeys = getenv("OPENSAMURAI_KEYS");
   scriptShots = getenv("OPENSAMURAI_SHOTS");
+  scriptScans = getenv("OPENSAMURAI_SCANS");
   if (getenv("OPENSAMURAI_FRAMES")) lastFrame = atol(getenv("OPENSAMURAI_FRAMES"));
   fast = getenv("OPENSAMURAI_FAST") != NULL;
   time_t t = time(NULL);
