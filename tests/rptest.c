@@ -147,13 +147,29 @@ static void host_subgame(void *ctx, int code)
     for (int k = 0; k < DS_LEN; k++)
       if (dsImage[k] != exitDs[exitDsPos][k] && !volatile_byte(k))
       {
-        if (d < 12) printf("    at the exit: %04X:%02X/%02X\n", k, dsImage[k], exitDs[exitDsPos][k]);
+        if (d < (getenv("SHOW") ? atoi(getenv("SHOW")) : 12)) printf("    at the exit: %04X:%02X/%02X\n", k, dsImage[k], exitDs[exitDsPos][k]);
         d++;
       }
     printf("    at the exit: %d bytes differ\n", d);
+    if (getenv("EXITDUMP"))  // EXITDUMP=PREFIX: the C's data segment at each exit (PREFIXc.N) and the game's (PREFIXg.N)
+    {
+      char name[512];
+      snprintf(name, sizeof name, "%sc.%d", getenv("EXITDUMP"), exitDsPos);
+      FILE *f = fopen(name, "wb");
+      if (f) fwrite(dsImage, 1, DS_LEN, f), fclose(f);
+      snprintf(name, sizeof name, "%sg.%d", getenv("EXITDUMP"), exitDsPos);
+      if ((f = fopen(name, "wb"))) fwrite(exitDs[exitDsPos], 1, DS_LEN, f), fclose(f);
+    }
     exitDsPos++;
   }
   uint16_t flag = shared_w(0x2c);
+  if (getenv("SUBSHOW") && subSharedPos < nSubShared)  // what the sub-game changed in the shared block
+  {
+    printf("    the sub-game's results:");
+    for (int k = 0; k < SHARED_SIZE; k++)
+      if (shared.b[k] != subShared[subSharedPos][k]) printf(" %03X:%02X>%02X", k, shared.b[k], subShared[subSharedPos][k]);
+    printf("\n");
+  }
   // the sub-game's results: as the capture has them at RP's next main entry, else the next tick's shared block
   memcpy(shared.b, subSharedPos < nSubShared ? subShared[subSharedPos++] : nextShared, SHARED_SIZE);
   shared_set_w(0x2c, flag);  // RP's own flag (it clears it when it resumes)
@@ -260,9 +276,9 @@ int main(int argc, char **argv)
     e.n = strtoull(p, &q, 10);
     if (q == p) continue;
     p = q + 1;
-    char kind[8] = { 0 };
+    char kind[16] = { 0 };
     int k = 0;
-    while (*p && *p != ' ' && *p != '\n' && k < 7) kind[k++] = *p++;
+    while (*p && *p != ' ' && *p != '\n' && k < 15) kind[k++] = *p++;
     if (*p == ' ') p++;
     if (!strcmp(kind, "tick"))  // SP [BP SI DI ES AX BX CX DX]
     {

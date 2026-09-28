@@ -231,7 +231,7 @@ captures are driven by random menu keys from a new game (the workspace's oracle/
 by comparing the functions entered and the events served with the real game's instruction trace, filtered
 through a FIFO (oracle/rtrace.sh).
 
-Results (2026-09-28): 15 of 16 captures of 20,000 frames from a new game pass tick by tick and in one run
+Results (2026-09-28): all 16 captures of 20,000 frames from a new game pass tick by tick and in one run
 (141 ticks, 20 of them across a sub-game); the key-waiting and key answers are the MISC calls' return values at
 their return sites (probing the BIOS buffer at the stub's entry raced the keyboard interrupt). From main's entry
 (its state captured there) to the first tick passes too: RP's start-up, with the pieces the C had stood in for
@@ -330,8 +330,11 @@ emulation; a melee that turns into a duel runs the duel after it (the launcher's
 written to the game directory (Alt-S at the Home Option scroll). RP refuses to save on the original disk
 (168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. Not yet: sound (the no-sound driver is the setup's choice), the joystick.
 
-Open: one RP capture of 16 (seed 14) differs after three sub-games in one tick (20 bytes of the character
-records), with the sub-games' own results replayed.
+Seed 14 (three sub-games in one tick) needed two things: the test replaying each sub-game's own results (the
+shared block at RP's next main entry; the test had been falling back to the next tick's), and FileOnDisk's putting
+back of the critical-error vector as the game does it: `mov ds, [05D2]` before `mov dx, [05D4]`, so the offset is
+the word at 05D4 of the saved vector's segment (DOS's, 072F:05D4 = 0000), not the saved offset. After the first
+disk check INT 24h is 072F:0000, and that is what the next check saves.
 
 ## 6. Methods
 
