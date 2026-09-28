@@ -169,5 +169,7 @@ void asm_far_call(u16 seg, u16 off);  // a call through a far function pointer (
 #define ASM_UNKNOWN_CALL(s, o) asm_unknown_call(s, o)
 #define ASM_BAD_SWITCH() asm_bad_switch()
 #define ASM_INDIRECT_CALL(t) asm_unknown_call(0xFFFF, t)
+// code of an interrupt handler (its iret, a chained far jump) reached as a function: it is not one
+#define ASM_NOT_A_FUNCTION(seg, off) asm_unknown_call(seg, off)
 
 #endif

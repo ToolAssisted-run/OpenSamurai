@@ -9,6 +9,7 @@ testPrograms = {
   'rptest' : 'the role-playing game against captures of the real game, tick by tick',
   'starttest' : 'the start-up program against captures of the real game, wait by wait',
   'duelexetest' : 'the duel program against captures of the real game, frame by frame',
+  'battleexetest' : 'the battle program against captures of the real game, step by step',
   'gametest' : 'the game as the launcher runs it, headless, from the game files',
   'battlesetuptest' : 'the battlefield, the enemy formation and the armies against captures',
 }

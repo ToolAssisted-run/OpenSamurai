@@ -15,6 +15,7 @@
 #include "start.h"
 #include "rp.h"
 #include "duelexe.h"
+#include "battleexe.h"
 
 #include <setjmp.h>
 #include <time.h>
@@ -541,6 +542,42 @@ static int run_duel(void)
   return duelCode;
 }
 
+// ---------------------------------------------------------------- BATTLE.EXE
+
+static uint32_t battle_answer(void *ctx, int what) { return duel_answer(ctx, what); }
+
+// the frame counter (DS:1B44): the timer's callback (1000:6828) counts the frames while INT 8 is BATTLE's
+// 1883:0160; the waits read it in a loop (the time passes as they look)
+static uint16_t battle_frames(void *ctx)
+{
+  (void)ctx;
+  poll(false);
+  return *(uint16_t *)far_ptr(BATTLE_DS, 0x1B44);
+}
+
+static void battle_timer_frame(void)
+{
+  if (*(uint16_t *)far_ptr(0, 0x20) != 0x0160 || *(uint16_t *)far_ptr(0, 0x22) != 0x304F) return;
+  (*(uint16_t *)far_ptr(BATTLE_DS, 0x1B44))++;
+}
+
+static int run_battle(void)
+{
+  ExeInfo e;
+  if (!program_load("BATTLE.EXE", &e)) return -1;
+  static BattleHost bh = { battle_answer, battle_frames, NULL, duel_exit_, NULL, NULL };
+  bh.gameDir = host->gameDir;
+  g_dsSeg = 0;
+  battle_attach(far_ptr(BATTLE_DS, 0), GAME_SHARED_SEG, &bh);
+  timerFrame = battle_timer_frame;
+  duelCode = -1;
+  battle_entry(GAME_PSP_SEG, e.ss, e.sp);
+  timerFrame = NULL;
+  dos_close_all();
+  program_end();
+  return duelCode;
+}
+
 // ---------------------------------------------------------------- RP and its sub-games
 
 // RP exits for a sub-game after hibernating (its data segment in the picture buffer): the launcher runs the
@@ -555,7 +592,8 @@ static void rp_subgame(void *ctx, int code)
   program_end();
   int r = 1;
   if (code == 1) r = run_duel();
-  else fprintf(stderr, "opensamurai: the %s is not in the reconstruction yet; it is skipped\n", code == 2 ? "battle" : "melee");
+  else if (code == 2) r = run_battle();
+  else fprintf(stderr, "opensamurai: the melee is not in the reconstruction yet; it is skipped\n");
   if (r == 0)  // the player quit (Alt-Q)
   {
     exitCode = 0;
