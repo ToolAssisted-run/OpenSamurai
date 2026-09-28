@@ -1,10 +1,12 @@
-// soundtest SND.TXT GAMEDIR: the IBM speaker driver (ISOUND.SAM, recompiled whole: isound.c) against a capture of
+// soundtest SND.TXT GAMEDIR [I|T]: a sound driver (I: the IBM speaker's, ISOUND.SAM: isound.c; T: Tandy's, TSOUND.SAM:
+// tsound.c; recompiled whole) against a capture of
 // the real one (the workspace's oracle/cap_snd.sh + snd_ev.py): the driver's slot calls as the game made them,
 // the port reads as the game got them, and every port write compared. The PWM player's polls of the PIT's channel
 // 0 (04A8, the loop's timing, not captured) are answered by a counter that wraps every fourth read, and its latch
 // command (04A4) is not compared. With no joystick the game's driver jumps over its button read (it writes the jump
 // at 0478 at its start); here the read answers no button. The timer's interrupts that came in a call (its ticks)
-// run at the call's next port access, and the PWM songs' key checks see the BIOS's keyboard buffer as the game's.
+// run at the call's next port access (or where it waits for them), and the PWM songs' key checks see the BIOS's
+// keyboard buffer as the game's.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +16,8 @@
 #include "exe.h"
 
 void is_slot(int slot);
+void ts_slot(int slot);
+static char drv = 'I';
 
 typedef struct
 {
@@ -38,7 +42,7 @@ static void fail(const char *what, int port, int value)
 
 // the timer's interrupts that came while a call ran (the ticks, slots 2 and 3, before its next port access in the
 // capture): run there, on its stack, its registers kept
-static int depth;
+static int depth, calls;
 static void call(int slot, u16 arg);
 static void interrupts(void)
 {
@@ -59,6 +63,19 @@ static void keys(void)
   {
     *(u16a *)far_ptr(0x40, 0x1C) = (u16)(*(u16a *)far_ptr(0x40, 0x1A) + (ev[pos].a ? 2 : 0));
     pos++;
+  }
+}
+
+// a wait for the tick in a call: the ticks that came meanwhile (the capture's next ones), else it would wait forever
+static void idle(void)
+{
+  int before = pos;
+  interrupts();
+  if (pos == before)
+  {
+    fail("waits for a tick; the game has", 0, 0);
+    printf("%d calls, %d events, %d differences\n", calls, nev, errors);
+    exit(1);
   }
 }
 
@@ -90,14 +107,14 @@ static bool port_out(u16 port, u8 v)
   return true;
 }
 
-static int calls;
 static void call(int slot, u16 arg)
 {
   PUSH(arg);     // slot 1's sound (the others take none)
   PUSH(0x1234);  // the caller's far return
   PUSH(0x0000);
   depth++;
-  is_slot(slot);
+  if (drv == 'T') ts_slot(slot);
+  else is_slot(slot);
   depth--;
   R.sp += 2;
   calls++;
@@ -110,7 +127,8 @@ static void call(int slot, u16 arg)
 
 int main(int argc, char **argv)
 {
-  if (argc < 3) { fprintf(stderr, "usage: soundtest SND.TXT GAMEDIR\n"); return 2; }
+  if (argc < 3) { fprintf(stderr, "usage: soundtest SND.TXT GAMEDIR [I|T]\n"); return 2; }
+  if (argc > 3) drv = argv[3][0];
   FILE *f = fopen(argv[1], "r");
   if (!f) { fprintf(stderr, "cannot read %s\n", argv[1]); return 2; }
   char line[256];
@@ -125,7 +143,7 @@ int main(int argc, char **argv)
   }
   fclose(f);
   char path[1024];
-  snprintf(path, sizeof path, "%s/ISOUND.SAM", argv[2]);
+  snprintf(path, sizeof path, "%s/%s", argv[2], drv == 'T' ? "TSOUND.SAM" : "ISOUND.SAM");
   ExeInfo info;
   if (!exe_load(path, 0xD000, &info)) { fprintf(stderr, "cannot load %s\n", path); return 2; }
   // the shared block's segment at 0000:04F0 (the driver reads the joystick flag there, +34: none)
@@ -134,6 +152,7 @@ int main(int argc, char **argv)
   *(u16a *)far_ptr(0x40, 0x1A) = *(u16a *)far_ptr(0x40, 0x1C) = 0x1E;  // the keyboard buffer: empty
   asm_port_hook = port_in;
   asm_port_out_hook = port_out;
+  asm_idle_hook = idle;
   R.ss = 0x9000;
   R.sp = 0xFFF0;
   while (pos < nev && errors < 10)

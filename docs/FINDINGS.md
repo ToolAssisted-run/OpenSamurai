@@ -328,8 +328,8 @@ from the frontend's scan codes. frontend/main.c: SDL2, mode 13h through the DAC,
 (OPENSAMURAI_KEYS, _SCANS, _SHOTS, _FRAMES, _FAST). The melee runs with its EGA driver, shown through the VGA
 emulation; a melee that turns into a duel runs the duel after it (the launcher's rule). RP's saved games are
 written to the game directory (Alt-S at the Home Option scroll). RP refuses to save on the original disk
-(168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. The IBM speaker's sound is
-the frontend's `/AI` (5.8). Not yet: the other sound boards, the joystick.
+(168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. The IBM speaker's and Tandy's
+sounds are the frontend's `/AI` and `/AT` (5.8, 5.9). Not yet: the AdLib, the MT-32, the joystick.
 
 Seed 14 (three sub-games in one tick) needed two things: the test replaying each sub-game's own results (the
 shared block at RP's next main entry; the test had been falling back to the next tick's), and FileOnDisk's putting
@@ -379,6 +379,17 @@ the timer's interrupts that came inside a call run at its next port access) and 
 the title song under START (3378 calls, 130,393 events, the song's 116,000 samples) and 16 captures of 20,000
 frames of the role-playing game from a new game (about 18,700 calls and 350,000 events each: 15 sounds, songs
 ended by keys, 138 changes to and from the fast rate) identical.
+
+### 5.9 Sound: Tandy's (TSOUND.SAM) — recompiled whole in source/tsound.c, verified
+
+The Tandy driver writes the SN76489 at port C0h (three square waves and a noise, each with a 2 dB-step
+attenuation), all from the tick: its tick never asks for the fast rate. Its start asks the BIOS for Tandy sound
+(INT 1Ah AH=81h) and keeps the answer at [00CF], which nothing reads. Slot 4 selects a music (0-5); for 0 and 5 it
+waits, in a loop, until the tick has silenced channels 0 and 1: the reconstruction's interrupts come when the host's
+time goes on, so the loop's back jump (075A) calls asm_idle, where the frontend runs to the next frame (the drivers'
+waits for their tick are patched so by work/snd_rec.sh). source/tandy.c models the chip (its channels at 3/16 of a
+PIT tick). Verification: tests/soundtest.c on the title (4519 calls) and 8 captures of 20,000 frames of the
+role-playing game (about 21,500 calls each, 22 sounds and musics) identical.
 
 ## 6. Methods
 

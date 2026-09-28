@@ -48,6 +48,11 @@ u16 asm_port_in(u16 port)
 
 bool (*asm_port_out_hook)(u16 port, u8 value);
 bool (*asm_sound_slot)(int slot);
+void (*asm_idle_hook)(void);
+void asm_idle(void)
+{
+  if (asm_idle_hook) asm_idle_hook();
+}
 void asm_port_out(u16 port, u16 value)
 {
   if (asm_port_out_hook && asm_port_out_hook(port, (u8)value)) return;
@@ -127,6 +132,7 @@ void asm_int(u8 n)
       return;
     }
   }
+  if (n == 0x1A && ah == 0x81) return;  // the Tandy's sound BIOS (the Tandy driver's test): not there, AX as it was
   fprintf(stderr, "asm2c: int %02X AX=%04X\n", n, R.ax);
 }
 

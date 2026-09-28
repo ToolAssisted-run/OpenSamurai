@@ -1,0 +1,14 @@
+// The Tandy 1000's sound chip (the SN76489: three square waves and a noise, each with its attenuation; written at
+// port C0h) on the PIT's clock that the host keeps (pit.h), and its sound (tandy.c)
+#ifndef OPENSAMURAI_TANDY_H
+#define OPENSAMURAI_TANDY_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+void tandy_reset(void);                                  // all four channels silent
+bool tandy_out(uint16_t port, uint8_t value, uint64_t t);  // false if not the chip's port
+// its sound up to time t (PIT ticks), RATE samples a second, added to out (at most max; the count returned)
+int tandy_render(uint64_t t, int rate, int16_t *out, int max);
+
+#endif

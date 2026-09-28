@@ -19,12 +19,15 @@
 #include "battleexe.h"
 #include "meleeexe.h"
 #include "pit.h"
+#include "tandy.h"
 
 #include <setjmp.h>
 #include <time.h>
 
 static const GameHost *host;
-static bool soundLoaded;  // the IBM speaker's driver (isound.c, at GAME_ISOUND_SEG), else the no-sound driver
+// the sound driver loaded at GAME_SOUND_DRIVER_SEG: 'I' the IBM speaker's (isound.c), 'T' Tandy's (tsound.c); 0 the
+// no-sound driver (the runtimes' own)
+static char soundDriver;
 
 // the BIOS's keyboard buffer: the host's keys, with one taken ahead for a look (INT 16h/01)
 static bool keyAhead;
@@ -76,7 +79,7 @@ static const struct { const char *name; uint32_t crc[2]; } knownFiles[] = {
   { "START.EXE", { 0x51d8b8d6, 0x68a03249 } }, { "RP.EXE", { 0x1dd7c2d2 } }, { "DUEL.EXE", { 0x227aaf64 } },
   { "BATTLE.EXE", { 0xd25c3efd } }, { "MELEE.EXE", { 0xa074f117 } }, { "MGRAPHIC.EXE", { 0xcb258ebc } },
   { "EGRAPHIC.MEL", { 0x103c0a98 } }, { "MISC.EXE", { 0xd3028214 } }, { "NSOUND.SAM", { 0xec073332 } },
-  { "FONTS.SAM", { 0x3661164a } }, { "ISOUND.SAM", { 0x057e152a } },
+  { "FONTS.SAM", { 0x3661164a } }, { "ISOUND.SAM", { 0x057e152a } }, { "TSOUND.SAM", { 0xabf415d0 } },
 };
 
 static uint32_t crc32_file(const char *path)
@@ -133,20 +136,21 @@ bool game_setup(const GameHost *h)
   ExeInfo e;
   if (!game_file("MISC.EXE", path, sizeof path) || !exe_load(path, GAME_MISC_SEG, &e)) return false;
   if (!game_file("NSOUND.SAM", path, sizeof path) || !exe_load(path, GAME_SOUND_SEG, &e)) return false;
-  soundLoaded = false;
-  if (h->sound == 'I')
+  soundDriver = 0;
+  const char *driverFile = h->sound == 'I' ? "ISOUND.SAM" : h->sound == 'T' ? "TSOUND.SAM" : NULL;
+  if (driverFile)
   {
-    if (!game_file("ISOUND.SAM", path, sizeof path) || !exe_load(path, GAME_ISOUND_SEG, &e)) return false;
-    soundLoaded = true;
+    if (!game_file(driverFile, path, sizeof path) || !exe_load(path, GAME_SOUND_DRIVER_SEG, &e)) return false;
+    soundDriver = h->sound;
   }
   if (!game_file("MGRAPHIC.EXE", path, sizeof path) || !exe_load(path, GAME_GRAPHICS_SEG, &e)) return false;
   uint16_t fonts = (uint16_t)(GAME_GRAPHICS_SEG + e.imageParagraphs);
   if (!game_file("FONTS.SAM", path, sizeof path) || !raw_load(path, fonts, NULL)) return false;
   // the shared block: the setup's choices (the drivers' names, VGA, no joystick), the launcher's segments
   memcpy(shared.b + 0x00, "MGRAPHIC.EXE", 13);
-  memcpy(shared.b + 0x0D, soundLoaded ? "ISOUND.SAM" : "NSOUND.SAM", 11);
+  memcpy(shared.b + 0x0D, driverFile ? driverFile : "NSOUND.SAM", 11);
   shared_set_w(0x1A, GAME_GRAPHICS_SEG);
-  shared_set_w(0x1C, soundLoaded ? GAME_ISOUND_SEG : GAME_SOUND_SEG);
+  shared_set_w(0x1C, soundDriver ? GAME_SOUND_DRIVER_SEG : GAME_SOUND_SEG);
   shared_set_w(0x1E, GAME_MISC_SEG);
   shared_set_w(0x20, GAME_BUFFER_SEG);
   shared_set_w(0x22, 4);  // VGA
@@ -254,13 +258,19 @@ static const ProgTimer *timer;  // the running program's
 
 // the sound driver's slot (0-6), called from the timer's handler as from the program: its answer (AX)
 void is_slot(int slot);
+void ts_slot(int slot);
+static void driver_slot(int slot)
+{
+  if (soundDriver == 'I') is_slot(slot);
+  else ts_slot(slot);
+}
 static uint16_t sound_call(int slot)
 {
-  if (!soundLoaded) return slot == 2 || slot == 5 ? 0 : R.ax;
+  if (!soundDriver) return slot == 2 || slot == 5 ? 0 : R.ax;
   Regs saved = R;
   PUSH(0x1234);  // a far return address out of the driver (the interrupted program's stack, as an interrupt's)
   PUSH(0x0000);
-  is_slot(slot);
+  driver_slot(slot);
   uint16_t ax = R.ax;
   R = saved;
   return ax;
@@ -352,6 +362,7 @@ static void audio_until(uint64_t t)
 {
   static int16_t buf[4096];
   int n = pit_render(t, 44100, buf, (int)(sizeof buf / sizeof *buf));
+  if (soundDriver == 'T') tandy_render(t, 44100, buf, n);
   if (n && host->audio) host->audio(host->ctx, buf, n);
 }
 
@@ -490,14 +501,14 @@ static uint16_t port_in(u16 port)
   return 0;
 }
 
-static bool port_out(u16 port, u8 v) { return pit_out(port, v, tNow); }
+static bool port_out(u16 port, u8 v) { return pit_out(port, v, tNow) || tandy_out(port, v, tNow); }
 
 // the programs' calls of the sound driver: the loaded one's (the BIOS's keyboard buffer as it was after a song:
 // the key that ended it is still the host's)
 static bool sound_slot(int slot)
 {
-  if (!soundLoaded) return false;
-  is_slot(slot);
+  if (!soundDriver) return false;
+  driver_slot(slot);
   w16(0x40, 0x1C, *(uint16_t *)far_ptr(0x40, 0x1A));
   return true;
 }
@@ -893,11 +904,13 @@ int game_run(const GameHost *h)
   t0 = h->now(h->ctx);
   nextFrame = t0 + FRAME_US;
   pit_reset();
+  tandy_reset();
   tNow = lastIrq = 0;
   game_frames = 0;
   asm_port_hook = port_in;
   asm_port_out_hook = port_out;
   asm_sound_slot = sound_slot;
+  asm_idle_hook = frame;  // (a driver waiting for its tick: the next frame's interrupts)
   int code = run_start();
   // the launcher: RP and its exit codes (1-3 the action games, which RP runs itself while it hibernates: see
   // rp_rt.c; 4 a new game: START again; 0 the end)
@@ -909,5 +922,6 @@ int game_run(const GameHost *h)
   asm_port_hook = NULL;
   asm_port_out_hook = NULL;
   asm_sound_slot = NULL;
+  asm_idle_hook = NULL;
   return code;
 }

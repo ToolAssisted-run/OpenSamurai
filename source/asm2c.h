@@ -188,6 +188,10 @@ extern bool (*asm_port_out_hook)(u16 port, u8 value);
 // caller's far return address on the stack, which it returns to; false if there is none (the runtimes then do
 // the no-sound driver's)
 extern bool (*asm_sound_slot)(int slot);
+// a driver's loop that waits for the timer's interrupt to change something (the reconstruction's interrupts come
+// when the host's time goes on): the host lets it go on (the waits' back jumps call this)
+extern void (*asm_idle_hook)(void);
+void asm_idle(void);
 void asm_far_call(u16 seg, u16 off);  // a call through a far function pointer (rp_core.c)
 #define ASM_PORT_IN(p) asm_port_in(p)
 #define ASM_PORT_OUT(p, v) asm_port_out(p, v)

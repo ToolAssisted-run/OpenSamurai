@@ -1,4 +1,4 @@
-// opensamurai GAMEDIR [/NT] [/AI]: the game in a window. The screen is the VGA's mode 13h (VRAM at A000, the DAC's
+// opensamurai GAMEDIR [/NT] [/AI|/AT]: the game in a window. The screen is the VGA's mode 13h (VRAM at A000, the DAC's
 // palette), 70 frames a second as on the VGA; the keyboard gives the BIOS's keys.
 #include <SDL.h>
 #include <ctype.h>
@@ -20,7 +20,7 @@ static uint16_t keys[64];
 static int keyHead, keyTail;
 // for scripted runs: OPENSAMURAI_KEYS="FRAME:KEY ..." (KEY hexadecimal, the BIOS's), OPENSAMURAI_SHOTS="FRAME ..."
 // (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting;
-// OPENSAMURAI_WAV=FILE: the sound (/AI) written to a WAV file
+// OPENSAMURAI_WAV=FILE: the sound written to a WAV file
 static long frameCount, lastFrame = -1;
 static const char *scriptKeys, *scriptShots, *scriptScans;
 // OPENSAMURAI_SCANS="FRAME:+SS FRAME:-SS ..." (SS the PC's scan code, hexadecimal; +e/-e for the grey keys): the
@@ -317,7 +317,7 @@ int main(int argc, char **argv)
 {
   if (argc < 2)
   {
-    fprintf(stderr, "usage: opensamurai GAMEDIR [/NT] [/AI]\n  GAMEDIR: the game's files (the original floppy's)\n  /NT: no title; /AI: the IBM speaker's sound\n");
+    fprintf(stderr, "usage: opensamurai GAMEDIR [/NT] [/AI|/AT]\n  GAMEDIR: the game's files (the original floppy's)\n  /NT: no title; /AI: the IBM speaker's sound; /AT: Tandy's\n");
     return 2;
   }
   scriptKeys = getenv("OPENSAMURAI_KEYS");
@@ -330,22 +330,22 @@ int main(int argc, char **argv)
   GameHost host = { present, now_us, sleep_until, key_waiting, read_key,
                     { tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, 0 },
                     argv[1], false, NULL, 'N', audio };
-  // the setup's arguments: /NT no title, /A<letter> the sound driver (I the IBM speaker, N none)
+  // the setup's arguments: /NT no title, /A<letter> the sound driver (I the IBM speaker, T Tandy's, N none)
   for (int k = 2; k < argc; k++)
     if (!strcasecmp(argv[k], "/NT")) host.noTitle = true;
     else if ((argv[k][0] == '/' || argv[k][0] == '-') && (argv[k][1] == 'A' || argv[k][1] == 'a') && argv[k][2])
       host.sound = (char)toupper((unsigned char)argv[k][2]);
-  if (host.sound != 'I' && host.sound != 'N')
+  if (host.sound != 'I' && host.sound != 'T' && host.sound != 'N')
   {
-    fprintf(stderr, "opensamurai: only the IBM speaker's sound driver (/AI) or none (/AN) is in the reconstruction\n");
+    fprintf(stderr, "opensamurai: the reconstruction has the IBM speaker's sound driver (/AI), Tandy's (/AT) or none (/AN)\n");
     host.sound = 'N';
   }
-  if (SDL_Init(SDL_INIT_VIDEO | (host.sound == 'I' ? SDL_INIT_AUDIO : 0)))
+  if (SDL_Init(SDL_INIT_VIDEO | (host.sound != 'N' ? SDL_INIT_AUDIO : 0)))
   {
     fprintf(stderr, "opensamurai: %s\n", SDL_GetError());
     return 1;
   }
-  if (host.sound == 'I' && !fast)
+  if (host.sound != 'N' && !fast)
   {
     SDL_AudioSpec want = { 0 }, have;
     want.freq = 44100;
