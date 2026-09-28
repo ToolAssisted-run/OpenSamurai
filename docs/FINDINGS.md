@@ -287,6 +287,41 @@ title, the credits, the quiz failed (8) and passed (4), the career menu, the Scr
 the province map, difficulty, family advantage. Not covered yet: the encounters of the career menu, the
 joystick (the captures have none), the sound boards.
 
+### 5.6 The action programs as programs (DUEL.EXE, BATTLE.EXE) — recompiled whole, verified
+
+For the one executable the action games run as the programs they are (their screens, their input), beside the
+readable reconstructions of their simulations (5.1, 5.2): recompiled whole like START (the workspace's
+work/duel_rec.sh, battle_rec.sh; source/duelexe_core.c, battleexe_core.c, generated), their runtimes in
+duelexe_rt.c and battleexe_rt.c (the picture decoder and exit in C; the DOS emulation shared in source/dos.c).
+
+- DUEL: the frame wait (the duel loop until 7 ticks, the getter 1000:20A0) and the keyboard joystick's reads
+  (1000:0A3E, 109D; the INT 9 handler's bytes DS:22F2-22FB) ask the host; its own disk check uses DOS's FCB
+  functions (29h, 11h). The start-up's _setargv pops its return address into a word and jumps through it. The
+  decoder is an older version: no 128-byte palette.
+- BATTLE: the waits are busy loops reading the frame counter (the getter 1000:681E) and polling the keys: the host
+  answers each read with the value the game read; a checkpoint at each simulation step (the counter's reset,
+  1000:6822). The terrain's seed reads the BIOS ticks at 0040:006C itself. Ghidra's function list misses the unit
+  state handlers of the table at DS:0042 (states 0, 1, 9, 13), the damage routine 1000:0A1C and 1000:8804; they
+  are reached through pointers (near calls through a pointer go through a dispatcher of the segment's functions).
+- Verified: 9 duels (3,580 frame waits) and a battle's 257 steps from main to exit (or the capture's end), the data
+  segment and the shared block equal at every checkpoint, the interrupt handlers' bytes (the frame timer's, the
+  keyboard joystick's) set from the capture at the checkpoints.
+
+### 5.7 The launcher and the frontend (source/game.c, frontend/main.c)
+
+The launcher (SAMURAI.COM) in C with the original's memory layout: the shared block at 1942, MISC.EXE at 1983,
+NSOUND.SAM at 19AA, MGRAPHIC.EXE at 19BD with FONTS.SAM after its image, the picture buffer at 1C72; each program's
+environment at 2773, its PSP at 27BC, the program at 27CC, DOS's arena from its control blocks; INT 22h-24h copied
+into the PSP and put back when the program ends. The setup's choices: VGA, no sound, no joystick. START runs from
+its C library start-up (its state at main equals the real game's), RP from main with its start-up's effects in C
+(to its first tick equal to the real game's), DUEL and BATTLE from their start-ups; RP's sub-game exits run the
+action program and then RP again from main, whose resume goes back into the hibernated run's C stack.
+Frames pass with the frontend's clock (70.086 Hz) whenever a program looks at the time; the running program's timer
+handler counts them once it has hooked INT 8; RP's and DUEL's INT 9 handlers (a keyboard joystick) are emulated
+from the frontend's scan codes. frontend/main.c: SDL2, mode 13h through the DAC, the BIOS's keys; scripted runs
+(OPENSAMURAI_KEYS, _SHOTS, _FRAMES, _FAST). Not yet: the melee (its EGRAPHIC.MEL driver draws in the EGA's planar
+mode with hardware scrolling), sound, saving.
+
 ## 6. Methods
 
 The oracle is the real game in DOSBox-X headless (Chimera's core with the tracer branch, as for SDLPoP2).
@@ -328,6 +363,7 @@ F-keys not at all; decoded with the workspace's work/jrsrkeys.py.
 
 ## 8. Log
 
+- 2026-09-28: DUEL and BATTLE recompiled whole and verified; the frontend plays START, RP, the duel and the battle.
 - 2026-09-28: START recompiled whole (the library too); 12 captures pass from main to exit.
 - 2026-09-27: the melee translated over its data segment and corrected until it matched its captures.
 - 2026-09-27: the battle's simulation reconstructed and verified against 96 captures (63,535 steps).

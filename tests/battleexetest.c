@@ -77,6 +77,7 @@ static int pop(Queue *q, uint32_t *v)
 
 static void problem(const char *fmt, const char *what)
 {
+  if (waitPos >= nwaits && exitCheck < 0) longjmp(exitJump, 3);  // past the last checkpoint of a capture without an exit: its end
   if (errors++ < 8) { printf("  "); printf(fmt, what); printf(" (at wait %d)\n", waitPos); }
   if (errors > 50) longjmp(exitJump, 2);  // the C went elsewhere
 }
