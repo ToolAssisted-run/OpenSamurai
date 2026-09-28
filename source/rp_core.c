@@ -1311,8 +1311,9 @@ static void a_1000_05bf(void)
 {
   FN(0x100005BF);
   R.cs = 0x27cc;
+  goto L_05bf;
 L_05ba:   PUSH(0x27cc); PUSH(0x05bf); rp_driver(91);   /* driver slot 91 */ // 05ba lcall 0x1a16, 0x3227
-  PUSH(0x27cc); PUSH(0x05c4); rp_driver(90);   /* driver slot 90 */ // 05bf lcall 0x1a16, 0x3222
+L_05bf:   PUSH(0x27cc); PUSH(0x05c4); rp_driver(90);   /* driver slot 90 */ // 05bf lcall 0x1a16, 0x3222
   R.ax = (u16)(OR16(R.ax, R.ax));                              // 05c4 or ax, ax
   if (R.zf) goto L_05ba;                                       // 05c6 je 0x5ba
   R.sp += 4; goto L_ret;                                       // 05c8 retf
@@ -39395,6 +39396,7 @@ static void a_168c_071d(void)
 {
   FN(0x168C071D);
   R.cs = 0x2e58;
+  goto L_071d;
 L_06c2:   FN(0x168C06C2); R.ax = (u16)(0x41e2 /* segment */);          // 06c2 mov ax, 0x1a16
   R.es = (u16)(R.ax);                                          // 06c5 mov es, ax
   R.cx = (u16)(R.di);                                          // 06c7 mov cx, di
@@ -39429,7 +39431,7 @@ L_0711:   R.di = (u16)(ADD16(R.di, R.dx));                             // 0711 a
   R.ax = (u16)(R.si);                                          // 0718 mov ax, si
   REPSTOSW();                                                  // 071a rep stosw word ptr es:[di], ax
 L_071c:   R.sp += 2; goto L_ret;                                       // 071c ret
-  R.si = (u16)(SUB16(R.si, R.si));                             // 071d sub si, si
+L_071d:   R.si = (u16)(SUB16(R.si, R.si));                             // 071d sub si, si
   R.bx = (u16)(OR16(R.bx, R.bx));                              // 071f or bx, bx
   if (R.sf) goto L_06c2;                                       // 0721 js 0x6c2
   R.si = (u16)(M16(DS, (u16)(0x2c9f)));                        // 0723 mov si, word ptr [0x2c9f]
@@ -40934,6 +40936,8 @@ void asm_far_call(u16 seg, u16 off)
   if (off == 0x03e2 && (seg == 0x290b || seg == 0x190b || seg == 0x40d7)) { a_290b_03e2(); return; }
   asm_unknown_call(seg, off);
 }
+
+
 
 
 
