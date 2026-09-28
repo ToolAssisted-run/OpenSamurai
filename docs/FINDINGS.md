@@ -620,6 +620,12 @@ hatamoto land × 2/10, troops × 2/10, honor × 75/100, swordsmanship × 6/10, g
 advantage (shared+30E) is applied inside the loop at index 0, so only at creation. The lord's five attributes are
 set to 122.
 
+Destinations (*code*, 261B:0136): the walk's tile becomes DS:80DE only on the home map (rank 1: 0x66..0x69 the four
+estates, rank 2: 0x6A..0x6D) and for the lord (0x6A at rank 1, 0x1D at rank 2), and on the enemy clan's map
+(0x66 / 0x6A ⇒ 4, DS:246 = 1); the loader turns every other castle and estate tile into 0x35. Terrain on the 48
+maps (MAP1..48.DAT): every province has 1-4 cells of 0x14 (the bandits' fortress) except Izumi, the only one with
+ferry tiles (0x28/0x29); bridges (0x13) 116 cells in all, 12 each in Omi and Mikawa.
+
 The travel encounters (*code*; the terrain names from MAP1.DAT's grid against OpenSamurai's screen of Satsuma).
 The walking loop 2706:0000 zeroes the trip's count DS:3DB4, and whenever `time()` passes a deadline 5 s ahead
 (about every 5-6 s, walking or not) calls 2706:0C0A with the tile under the figure (grid 20 × 20, cell 16 × 10 px,
