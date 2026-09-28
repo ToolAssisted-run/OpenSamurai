@@ -598,6 +598,15 @@ slot 25 is a `retf` (the CGA palette tables are ignored); a 16-byte picture pale
 driver's master table (its segment D5, offset CE, 128 × 3 bytes, the first 16 the EGA colours), and a
 byte-per-pixel picture's values index that table.
 
+Taking the lord's place (*code*). Usurpation (177D:3132 at the lord's castle): battle 00BA(6, 5, troops, 7ED8)
+lost ⇒ window 0x87 and game over; castle melee 0008(5, 5, 5, 1) with shared+28 cleared for it, player fallen or no
+duel ⇒ (0x3D with the difficulty's odds) 0x87, game over; duel 019E(2, 5, 7EDA) lost ⇒ 0x3D, 0x87, game over; won ⇒
+0x89 and 24E2:0004(1): window 0xCB and 133F:1B40(3), daimyo at once. Assassination of the lord (1B28, action 0x91,
+t = 5): melee 0008(1, t, location, 1, 0, 2) (duel if it asks: 0x88, 019E(2, t, sword)); won ⇒ 0x89, DS:8F52 = 2
+(murdered) and 24E2:0004(0), the ordinary succession: message 0xAE, then at rank 1 24E2:009B (the top-ranked
+character becomes the lord) and at rank 2 24E2:014C (the succession crisis). 24E2:0004 tests shared+2E first in
+both cases.
+
 Promotions (*code*, 133F:1B40(rank)): the characters are regenerated from index 0 only at rank 1 (a new game), from
 index 1 at a promotion, so the player keeps the record (name, age, family) and is scaled, clamped 1..128: to
 hatamoto land × 2/10, troops × 2/10, honor × 75/100, swordsmanship × 6/10, generalship / 2; to daimyo honor ×
