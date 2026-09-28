@@ -7,7 +7,7 @@
 
 # OpenSamurai
 
-OpenSamurai is an unofficial remake of *Sword of the Samurai* (MicroProse, DOS, 1989).
+OpenSamurai is an unofficial reconstruction of *Sword of the Samurai* (MicroProse, DOS, 1989).
 
 It is written in C and rebuilt from the original program, the way [SDLPoP2](https://github.com/ToolAssisted-run/SDLPoP2) was for Prince of Persia 2. It plays the original game's data files, so you need your own copy of the game.
 
