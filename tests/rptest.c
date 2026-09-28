@@ -31,6 +31,10 @@ typedef enum { E_TICK, E_TIME, E_KEY, E_WAIT, E_SEED, E_KB90 } Kind;
 // the shared blocks the sub-games left (RP's main entries after them), in order
 static uint8_t (*subShared)[SHARED_SIZE];
 static uint64_t *subSharedN;
+// RP's data segment at each exit (the capture's), in order: compared with the C's as a sub-game begins
+static uint8_t (*exitDs)[DS_LEN];
+static uint64_t *exitDsN;
+static int nExitDs, exitDsPos;
 static int nSubShared, subSharedPos;
 typedef struct { uint64_t n; Kind kind; uint32_t value, count; uint8_t f[8], k[8], j[2]; char site; } Event;
 
@@ -128,11 +132,24 @@ static void host_seeded(void *ctx, uint16_t seed)
 static int exitCode;
 static const uint8_t *nextShared;  // the next tick's shared block: what the sub-game left
 static int subgames;
+static int volatile_byte(int k);
 static void host_subgame(void *ctx, int code)
 {
   (void)ctx;
   printf("  sub-game %d\n", code);
   subgames++;
+  if (exitDsPos < nExitDs)  // RP's data segment as it left, against the game's
+  {
+    int d = 0;
+    for (int k = 0; k < DS_LEN; k++)
+      if (dsImage[k] != exitDs[exitDsPos][k] && !volatile_byte(k))
+      {
+        if (d < 12) printf("    at the exit: %04X:%02X/%02X\n", k, dsImage[k], exitDs[exitDsPos][k]);
+        d++;
+      }
+    printf("    at the exit: %d bytes differ\n", d);
+    exitDsPos++;
+  }
   uint16_t flag = shared_w(0x2c);
   // the sub-game's results: as the capture has them at RP's next main entry, else the next tick's shared block
   memcpy(shared.b, subSharedPos < nSubShared ? subShared[subSharedPos++] : nextShared, SHARED_SIZE);
@@ -222,10 +239,11 @@ int main(int argc, char **argv)
   fclose(f);
   FILE *fi = fopen(argv[2], "r");
   if (!fi) { fprintf(stderr, "cannot read %s\n", argv[2]); return 2; }
-  static char line[4096];
+  static char *line;
+  if (!line) line = malloc(0x9760 * 2 + 256);
   uint16_t (*tickRegs)[9] = NULL;
   int ntsp = 0, cap = 0, capSp = 0;
-  while (fgets(line, sizeof line, fi))
+  while (fgets(line, 0x9760 * 2 + 256, fi))
   {
     Event e = { 0 };
     char *p = line, *q;
@@ -257,6 +275,14 @@ int main(int argc, char **argv)
       if (p) hexbytes(++p, e.j, 2);
     }
     else if (!strcmp(kind, "seed")) { e.kind = E_SEED; e.value = (uint32_t)strtoul(p, 0, 16); }
+    else if (!strcmp(kind, "exitds"))  // RP's data segment at exit()
+    {
+      exitDs = realloc(exitDs, sizeof *exitDs * (size_t)(nExitDs + 1));
+      exitDsN = realloc(exitDsN, sizeof *exitDsN * (size_t)(nExitDs + 1));
+      exitDsN[nExitDs] = e.n;
+      hexbytes(p, exitDs[nExitDs++], DS_LEN);
+      continue;
+    }
     else if (!strcmp(kind, "subshared"))  // the shared block a sub-game left
     {
       subShared = realloc(subShared, sizeof *subShared * (size_t)(nSubShared + 1));
@@ -332,6 +358,7 @@ int main(int argc, char **argv)
     timeLeft = 0;
     while (evPos < nev && ev[evPos].n < a->n) evPos++;
     for (subSharedPos = 0; subSharedPos < nSubShared && subSharedN[subSharedPos] < a->n; subSharedPos++) {}
+    for (exitDsPos = 0; exitDsPos < nExitDs && exitDsN[exitDsPos] < a->n; exitDsPos++) {}
     uint16_t defaultRegs[9] = { 0x9736, 0x973C };
     const uint16_t *regs = g < ntsp ? tickRegs[g] : defaultRegs;
     errors = 0;
