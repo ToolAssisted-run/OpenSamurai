@@ -1,6 +1,7 @@
-// opensamurai GAMEDIR [/NT]: the game in a window. The screen is the VGA's mode 13h (VRAM at A000, the DAC's
+// opensamurai GAMEDIR [/NT] [/AI]: the game in a window. The screen is the VGA's mode 13h (VRAM at A000, the DAC's
 // palette), 70 frames a second as on the VGA; the keyboard gives the BIOS's keys.
 #include <SDL.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +19,8 @@ static SDL_Texture *texture;
 static uint16_t keys[64];
 static int keyHead, keyTail;
 // for scripted runs: OPENSAMURAI_KEYS="FRAME:KEY ..." (KEY hexadecimal, the BIOS's), OPENSAMURAI_SHOTS="FRAME ..."
-// (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting
+// (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting;
+// OPENSAMURAI_WAV=FILE: the sound (/AI) written to a WAV file
 static long frameCount, lastFrame = -1;
 static const char *scriptKeys, *scriptShots, *scriptScans;
 // OPENSAMURAI_SCANS="FRAME:+SS FRAME:-SS ..." (SS the PC's scan code, hexadecimal; +e/-e for the grey keys): the
@@ -290,11 +292,32 @@ static uint16_t read_key(void *ctx)
   return k;
 }
 
+// the speaker's sound: to the audio device (at most a quarter of a second ahead), and to OPENSAMURAI_WAV (a WAV
+// file of it all)
+static SDL_AudioDeviceID audioDevice;
+static FILE *wav;
+static uint32_t wavSamples;
+static void put32(uint32_t v, FILE *f) { for (int k = 0; k < 4; k++) fputc((int)(v >> 8 * k) & 0xFF, f); }
+static void wav_header(uint32_t n)
+{
+  fseek(wav, 0, SEEK_SET);
+  fwrite("RIFF", 1, 4, wav), put32(36 + 2 * n, wav), fwrite("WAVEfmt ", 1, 8, wav);
+  put32(16, wav), put32(1 | 1 << 16, wav), put32(44100, wav), put32(88200, wav), put32(2 | 16 << 16, wav);
+  fwrite("data", 1, 4, wav), put32(2 * n, wav);
+  fseek(wav, 0, SEEK_END);
+}
+static void audio(void *ctx, const int16_t *samples, int n)
+{
+  (void)ctx;
+  if (wav) fwrite(samples, 2, (size_t)n, wav), wavSamples += (uint32_t)n;
+  if (audioDevice && SDL_GetQueuedAudioSize(audioDevice) < 44100 / 4 * 2) SDL_QueueAudio(audioDevice, samples, (Uint32)n * 2);
+}
+
 int main(int argc, char **argv)
 {
   if (argc < 2)
   {
-    fprintf(stderr, "usage: opensamurai GAMEDIR [/NT]\n  GAMEDIR: the game's files (the original floppy's)\n");
+    fprintf(stderr, "usage: opensamurai GAMEDIR [/NT] [/AI]\n  GAMEDIR: the game's files (the original floppy's)\n  /NT: no title; /AI: the IBM speaker's sound\n");
     return 2;
   }
   scriptKeys = getenv("OPENSAMURAI_KEYS");
@@ -306,18 +329,42 @@ int main(int argc, char **argv)
   struct tm *tm = localtime(&t);
   GameHost host = { present, now_us, sleep_until, key_waiting, read_key,
                     { tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, 0 },
-                    argv[1], argc > 2 && !strcasecmp(argv[2], "/NT"), NULL };
-  if (SDL_Init(SDL_INIT_VIDEO))
+                    argv[1], false, NULL, 'N', audio };
+  // the setup's arguments: /NT no title, /A<letter> the sound driver (I the IBM speaker, N none)
+  for (int k = 2; k < argc; k++)
+    if (!strcasecmp(argv[k], "/NT")) host.noTitle = true;
+    else if ((argv[k][0] == '/' || argv[k][0] == '-') && (argv[k][1] == 'A' || argv[k][1] == 'a') && argv[k][2])
+      host.sound = (char)toupper((unsigned char)argv[k][2]);
+  if (host.sound != 'I' && host.sound != 'N')
+  {
+    fprintf(stderr, "opensamurai: only the IBM speaker's sound driver (/AI) or none (/AN) is in the reconstruction\n");
+    host.sound = 'N';
+  }
+  if (SDL_Init(SDL_INIT_VIDEO | (host.sound == 'I' ? SDL_INIT_AUDIO : 0)))
   {
     fprintf(stderr, "opensamurai: %s\n", SDL_GetError());
     return 1;
   }
+  if (host.sound == 'I' && !fast)
+  {
+    SDL_AudioSpec want = { 0 }, have;
+    want.freq = 44100;
+    want.format = AUDIO_S16SYS;
+    want.channels = 1;
+    want.samples = 1024;
+    audioDevice = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    if (!audioDevice) fprintf(stderr, "opensamurai: no sound: %s\n", SDL_GetError());
+    else SDL_PauseAudioDevice(audioDevice, 0);
+  }
+  if (getenv("OPENSAMURAI_WAV")) wav = fopen(getenv("OPENSAMURAI_WAV"), "wb"), wav_header(0);
   window = SDL_CreateWindow("Sword of the Samurai", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 960, 600, SDL_WINDOW_RESIZABLE);
   renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (!renderer) renderer = SDL_CreateRenderer(window, -1, 0);
   SDL_RenderSetLogicalSize(renderer, 320, 240);  // the VGA's 320x200 on a 4:3 screen
   texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 200);
   int code = game_run(&host);
+  if (wav) wav_header(wavSamples), fclose(wav);
+  if (audioDevice) SDL_CloseAudioDevice(audioDevice);
   if (code < 0) fprintf(stderr, "opensamurai: the game's files are not all in %s (MISC.EXE, NSOUND.SAM, MGRAPHIC.EXE, FONTS.SAM, START.EXE, ...)\n", argv[1]);
   SDL_Quit();
   return code < 0 ? 1 : 0;

@@ -106,6 +106,7 @@ void ml_driver(int slot)
     else eg_slot(slot);
     return;
   }
+  if (slot >= 100 && slot <= 106 && asm_sound_slot && asm_sound_slot(slot - 100)) return;  // the sound driver loaded
   switch (slot)
   {
   case 90:

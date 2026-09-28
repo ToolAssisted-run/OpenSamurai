@@ -46,8 +46,11 @@ u16 asm_port_in(u16 port)
   return 0;
 }
 
+bool (*asm_port_out_hook)(u16 port, u8 value);
+bool (*asm_sound_slot)(int slot);
 void asm_port_out(u16 port, u16 value)
 {
+  if (asm_port_out_hook && asm_port_out_hook(port, (u8)value)) return;
   if (vga_port_out(port, (u8)value)) return;
   if (port == 0x3C8) { dacIndex = (u8)value; dacPart = 0; }
   else if (port == 0x3C9)

@@ -322,19 +322,63 @@ into the PSP and put back when the program ends. The setup's choices: VGA, no so
 its C library start-up (its state at main equals the real game's), RP from main with its start-up's effects in C
 (to its first tick equal to the real game's), DUEL and BATTLE from their start-ups; RP's sub-game exits run the
 action program and then RP again from main, whose resume goes back into the hibernated run's C stack.
-Frames pass with the frontend's clock (70.086 Hz) whenever a program looks at the time; the running program's timer
-handler counts them once it has hooked INT 8; RP's and DUEL's INT 9 handlers (a keyboard joystick) are emulated
+Frames pass with the frontend's clock (70.086 Hz) whenever a program looks at the time; the timer's interrupts
+come from a model of the PIT (5.8), and the running program's handler runs at each once it has hooked INT 8; RP's and DUEL's INT 9 handlers (a keyboard joystick) are emulated
 from the frontend's scan codes. frontend/main.c: SDL2, mode 13h through the DAC, the BIOS's keys; scripted runs
 (OPENSAMURAI_KEYS, _SCANS, _SHOTS, _FRAMES, _FAST). The melee runs with its EGA driver, shown through the VGA
 emulation; a melee that turns into a duel runs the duel after it (the launcher's rule). RP's saved games are
 written to the game directory (Alt-S at the Home Option scroll). RP refuses to save on the original disk
-(168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. Not yet: sound (the no-sound driver is the setup's choice), the joystick.
+(168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. The IBM speaker's sound is
+the frontend's `/AI` (5.8). Not yet: the other sound boards, the joystick.
 
 Seed 14 (three sub-games in one tick) needed two things: the test replaying each sub-game's own results (the
 shared block at RP's next main entry; the test had been falling back to the next tick's), and FileOnDisk's putting
 back of the critical-error vector as the game does it: `mov ds, [05D2]` before `mov dx, [05D4]`, so the offset is
 the word at 05D4 of the saved vector's segment (DOS's, 072F:05D4 = 0000), not the saved offset. After the first
 disk check INT 24h is 072F:0000, and that is what the next check saves.
+
+### 5.8 Sound: the IBM speaker (ISOUND.SAM) — recompiled whole in source/isound.c, verified
+
+The sound drivers are overlays with seven slots (the stubs' 100-106): 0 start, 1 play sound N (N even, to 56h:
+a routine from the table at cs:0041), 2 the tick, 3 the fast tick, 4 and 6 nothing, 5 0. ISOUND.SAM has two ways
+of sounding. The effects are tones on channel 2 of the PIT (mode 3, the speaker's gate and data bits of port 61h
+open): a sound is a list of 10-byte steps (length, pitch, a random or swept part), advanced by the tick; the
+fast tick moves the pitch between ticks. The songs are a three-voice PWM player that takes the machine over:
+channel 0 becomes a 9470 Hz sample clock (mode 2, count 7Eh, the timer interrupt masked at the PIC), and a loop
+polls its count for each sample and sets port 61h's two bits to the voices' mix, note by note, until the song
+ends or a key is in the BIOS's buffer (or the joystick's button). The driver writes its own code at the start:
+the joystick's read jumped over when there is none (0478), the PWM loop's latch of channel 0 made NOPs when
+channel 2 does not count (04A4), and a song's `mov al, 7Bh` gets port 61h's other bits (04E1): in the C the last
+reads the byte from memory, the other two keep their effect without the patch.
+
+The timer handler (the library's, in every program: its bytes at a block B in the program's data segment, see
+rp_rt.c) runs the frame routine every n interrupts; the frame routine calls the tick (at a fast rate of 4, the
+VGA's, every 7th is left out: the sound's 60 a second), and a tick's answer asks for the fast rate (the interrupts
+n times a frame, the fast tick at each; DUEL's handler has no fast tick) or back. The rate comes from the
+program's start: it measures the frame's length with channel 0's count at 17 retraces. On a VGA with no sound
+that is 17024 ticks (4 fast interrupts of ~3977), and the timer runs in step with the retrace, 70 a second.
+The speaker's driver sets channel 0 to 19600 at its first start (a test of the chip it does once: a flag in its
+code, cs:00FD), which START does just before it measures: the readings alias, the length comes out 24450 (or
+23014, with the phase), the fast rate 6, and START's timer runs at 48.8 a second, set again to the retrace every
+20 frame routines: about 46 frame routines a second instead of 70. START runs slower with the IBM sound, as in the
+real game (DOSBox-X's START measures 24450 and 6, and runs 46.7 a second; the model of the PIT here gives the same
+24450 and 6, and 45). The later programs' starts of the driver leave the chip alone: they measure the BIOS's rate
+(START's end puts it back) and run at the VGA's 70 (DOSBox-X's RP: 17143 ticks, 4, 66.7 frame routines a second:
+its interrupts come just before the retrace, and every 20th waits for it and loses one; here they come on it).
+
+The frontend's timer is the PIT's: channel 0 as it is set gives the interrupts, and the running program's
+handler is modelled from its block (the frame routine's counters as before); the PWM loop's polls move the time
+on, the frames with it at the host's pace. The sound is the speaker cone's position averaged over each output
+sample (44100 Hz), less its steady level. The IBM speaker's driver sits at D000 in the reconstruction (in the
+real game it is at 19AA, where the no-sound driver is, and the programs higher by its size: every other segment
+stays where the no-sound layout has it).
+
+Verification: tests/soundtest.c replays the driver's calls from captures of the real game (oracle/cap_snd.sh,
+snd_ev.py: every slot call with its sound, every port read and write, the ticks' answers, the songs' key checks;
+the timer's interrupts that came inside a call run at its next port access) and compares every port write:
+the title song under START (3378 calls, 130,393 events, the song's 116,000 samples) and 16 captures of 20,000
+frames of the role-playing game from a new game (about 18,700 calls and 350,000 events each: 15 sounds, songs
+ended by keys, 138 changes to and from the fast rate) identical.
 
 ## 6. Methods
 

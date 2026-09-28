@@ -23,6 +23,9 @@ typedef struct
   const char *gameDir;
   bool noTitle;  // /NT: no title sequence
   void *ctx;
+  char sound;    // the setup's sound driver (its name's letter, as the setup's /A<letter>): 'I' the IBM speaker, else none
+  // the speaker's sound, as each frame ends: 44100 samples a second, mono (NULL: not wanted)
+  void (*audio)(void *ctx, const int16_t *samples, int n);
 } GameHost;
 
 // The video frames (70.086 a second, the VGA's): their count so far
@@ -39,6 +42,9 @@ enum
   GAME_BUFFER_SEG = 0x1C72,   // the launcher's 44 KB picture buffer
   GAME_ENV_SEG = 0x2773,      // a program's environment
   GAME_PSP_SEG = 0x27BC,      // its program segment prefix; the program at +10h
+  // the IBM speaker's driver, when it is the setup's choice: a segment of its own above the video memory (the real
+  // game has it where the no-sound driver is, and everything after it higher by its size)
+  GAME_ISOUND_SEG = 0xD000,
 };
 
 // The launcher's work before the first program: the drivers and fonts loaded, the shared block as the launcher and

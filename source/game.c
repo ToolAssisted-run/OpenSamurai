@@ -1,7 +1,8 @@
 // The game as its launcher runs it (game.h). SAMURAI.COM (the original launcher, OLD.COM in the provided game
 // directory) publishes a 1 KB shared block, loads MISC.EXE, runs SU.EXE (the setup), loads the graphics driver
 // with FONTS.SAM after it and the sound driver, allocates a picture buffer, runs START.EXE, and then RP.EXE and
-// the action games by the exit codes. Here the setup's choices are VGA, no sound and no joystick.
+// the action games by the exit codes. Here the setup's choices are VGA, no joystick, and no sound or the IBM
+// speaker (the host's).
 #include "game.h"
 
 #include <stdio.h>
@@ -17,11 +18,13 @@
 #include "duelexe.h"
 #include "battleexe.h"
 #include "meleeexe.h"
+#include "pit.h"
 
 #include <setjmp.h>
 #include <time.h>
 
 static const GameHost *host;
+static bool soundLoaded;  // the IBM speaker's driver (isound.c, at GAME_ISOUND_SEG), else the no-sound driver
 
 // the BIOS's keyboard buffer: the host's keys, with one taken ahead for a look (INT 16h/01)
 static bool keyAhead;
@@ -73,7 +76,7 @@ static const struct { const char *name; uint32_t crc[2]; } knownFiles[] = {
   { "START.EXE", { 0x51d8b8d6, 0x68a03249 } }, { "RP.EXE", { 0x1dd7c2d2 } }, { "DUEL.EXE", { 0x227aaf64 } },
   { "BATTLE.EXE", { 0xd25c3efd } }, { "MELEE.EXE", { 0xa074f117 } }, { "MGRAPHIC.EXE", { 0xcb258ebc } },
   { "EGRAPHIC.MEL", { 0x103c0a98 } }, { "MISC.EXE", { 0xd3028214 } }, { "NSOUND.SAM", { 0xec073332 } },
-  { "FONTS.SAM", { 0x3661164a } },
+  { "FONTS.SAM", { 0x3661164a } }, { "ISOUND.SAM", { 0x057e152a } },
 };
 
 static uint32_t crc32_file(const char *path)
@@ -130,14 +133,20 @@ bool game_setup(const GameHost *h)
   ExeInfo e;
   if (!game_file("MISC.EXE", path, sizeof path) || !exe_load(path, GAME_MISC_SEG, &e)) return false;
   if (!game_file("NSOUND.SAM", path, sizeof path) || !exe_load(path, GAME_SOUND_SEG, &e)) return false;
+  soundLoaded = false;
+  if (h->sound == 'I')
+  {
+    if (!game_file("ISOUND.SAM", path, sizeof path) || !exe_load(path, GAME_ISOUND_SEG, &e)) return false;
+    soundLoaded = true;
+  }
   if (!game_file("MGRAPHIC.EXE", path, sizeof path) || !exe_load(path, GAME_GRAPHICS_SEG, &e)) return false;
   uint16_t fonts = (uint16_t)(GAME_GRAPHICS_SEG + e.imageParagraphs);
   if (!game_file("FONTS.SAM", path, sizeof path) || !raw_load(path, fonts, NULL)) return false;
   // the shared block: the setup's choices (the drivers' names, VGA, no joystick), the launcher's segments
   memcpy(shared.b + 0x00, "MGRAPHIC.EXE", 13);
-  memcpy(shared.b + 0x0D, "NSOUND.SAM", 11);
+  memcpy(shared.b + 0x0D, soundLoaded ? "ISOUND.SAM" : "NSOUND.SAM", 11);
   shared_set_w(0x1A, GAME_GRAPHICS_SEG);
-  shared_set_w(0x1C, GAME_SOUND_SEG);
+  shared_set_w(0x1C, soundLoaded ? GAME_ISOUND_SEG : GAME_SOUND_SEG);
   shared_set_w(0x1E, GAME_MISC_SEG);
   shared_set_w(0x20, GAME_BUFFER_SEG);
   shared_set_w(0x22, 4);  // VGA
@@ -217,12 +226,147 @@ static void prog_exit(void *ctx, int code)
 // ---------------------------------------------------------------- time
 
 // Frames pass with the host's clock (70.086 a second, the VGA's), whenever the program looks at the time (a key
-// poll, the clock, the VGA's status, a frame wait); a frame wait waits for the next. At each frame the running
-// program's timer handler (INT 8, once it has hooked it) counts it.
+// poll, the clock, the VGA's status, a frame wait); a frame wait waits for the next. The time of the chips runs
+// with them: the PIT's ticks, FRAME_CLOCKS a frame. The timer's interrupts come as channel 0 is set (by the BIOS,
+// the program's handler, the sound driver), and the running program's handler (INT 8, once it has hooked it) runs
+// at each: the MicroProse library's (the same in each program, its bytes in the program's data segment), which
+// runs the program's frame routine every so many interrupts and the sound driver's ticks.
 #define FRAME_US 14268
+#define FRAME_CLOCKS 17024   // 1193182 / 70.086
+#define RETRACE_CLOCKS 76    // the vertical retrace's pulse: 2 of 449 lines
 uint64_t game_frames;
 static uint64_t t0, nextFrame;
-static void (*timerFrame)(void);  // the running program's frame routine
+static uint64_t tNow;        // the chips' time now (PIT ticks)
+static uint64_t lastIrq;     // the last interrupt's
+static bool synced;          // the program saw the retrace begin: it runs at the frame's start (else in its middle)
+
+// a program's timer handler: its bytes (the library's block B, see rp_rt.c's InstallTimer; the frame routine's
+// 1-in-7 count), whether it calls the sound driver's fast tick at each interrupt, whether it is hooked, and its
+// frame routine's own work (before the sound's)
+typedef struct
+{
+  uint16_t ds, block, skip;
+  bool fastTicks;
+  bool (*hooked)(void);
+  void (*counters)(void);
+} ProgTimer;
+static const ProgTimer *timer;  // the running program's
+
+// the sound driver's slot (0-6), called from the timer's handler as from the program: its answer (AX)
+void is_slot(int slot);
+static uint16_t sound_call(int slot)
+{
+  if (!soundLoaded) return slot == 2 || slot == 5 ? 0 : R.ax;
+  Regs saved = R;
+  PUSH(0x1234);  // a far return address out of the driver (the interrupted program's stack, as an interrupt's)
+  PUSH(0x0000);
+  is_slot(slot);
+  uint16_t ax = R.ax;
+  R = saved;
+  return ax;
+}
+
+static uint16_t *w(const ProgTimer *p, uint16_t off) { return (uint16_t *)far_ptr(p->ds, off); }
+
+// the channel set again (the library's 0905: every 20th time, or at once after a change of rate), in step with the
+// retrace: the handler waits for its start (counting the lines' toggles), and a wait delays the next frame routine
+// by an interrupt
+static void timer_set(const ProgTimer *p)
+{
+  uint8_t *d = far_ptr(p->ds, 0);
+  uint16_t b = p->block;
+  if (--d[b + 0xC]) return;
+  d[b + 0xC] = 0x14;
+  uint16_t toggles = 0;
+  if (d[b + 0x13])
+  {
+    uint64_t into = tNow % FRAME_CLOCKS;
+    if (into >= RETRACE_CLOCKS)
+    {
+      toggles = (uint16_t)((FRAME_CLOCKS - into) * 2 * 449 / FRAME_CLOCKS + 1);
+      tNow += FRAME_CLOCKS - into;
+    }
+  }
+  *w(p, b + 6) = *w(p, b + 4);
+  pit_out(0x43, 0x36, tNow);
+  pit_out(0x40, (uint8_t)*w(p, b + 6), tNow);
+  pit_out(0x40, (uint8_t)(*w(p, b + 6) >> 8), tNow);
+  (*w(p, b + 8))++;
+  *w(p, b + 0x16) = toggles;
+  if (toggles) (*w(p, b + 0x14))++;
+}
+
+// the frame routine's sound part: the driver's tick (at a fast rate of 4, the VGA's, every 7th is left out: the
+// sound's 60 a second), whose answer asks for the fast rate (positive) or the frame's (negative)
+static void timer_sound(const ProgTimer *p)
+{
+  uint8_t *d = far_ptr(p->ds, 0);
+  uint16_t b = p->block;
+  if (*w(p, b + 0xD) == 4 && (int8_t)--d[p->skip] <= 0)
+  {
+    d[p->skip] = 7;
+    return;
+  }
+  uint16_t ax = sound_call(2);
+  if (!ax) return;
+  if ((int16_t)ax > 0) *w(p, b + 0xA) = *w(p, b + 0xD), *w(p, b + 4) = (uint16_t)(*w(p, b + 0xF) / *w(p, b + 0xD));
+  else *w(p, b + 0xA) = 1, *w(p, b + 4) = *w(p, b + 0xF);
+  d[b + 0xC] = 1;
+}
+
+static void timer_interrupt(const ProgTimer *p)
+{
+  uint16_t b = p->block;
+  uint32_t sum = (uint32_t)*w(p, b) | (uint32_t)*w(p, b + 2) << 16;
+  sum += *w(p, b + 6);
+  *w(p, b) = (uint16_t)sum, *w(p, b + 2) = (uint16_t)(sum >> 16);
+  if (!--*w(p, b + 0x14))
+  {
+    *w(p, b + 0x14) = *w(p, b + 0xA);
+    timer_set(p);
+    *far_ptr(p->ds, (uint16_t)(b - 2)) = 0;
+    p->counters();
+    timer_sound(p);
+  }
+  if (p->fastTicks && *w(p, b + 0xA) != 1) sound_call(3);
+  if (*w(p, b + 2)) (*w(p, b + 2))--;  // (the BIOS's own handler's turn: its tick is the host's clock)
+}
+
+// the interrupts before time `end`
+static void interrupts_until(uint64_t end)
+{
+  uint64_t keep = tNow;
+  for (;;)
+  {
+    uint64_t t = pit_next_irq(lastIrq);
+    if (t >= end) break;
+    lastIrq = tNow = t;
+    if (timer && timer->hooked()) timer_interrupt(timer);
+    if (tNow > lastIrq) lastIrq = tNow;  // (the handler waited for the retrace)
+  }
+  if (tNow < keep) tNow = keep;
+}
+
+// the speaker's sound since the last frame
+static void audio_until(uint64_t t)
+{
+  static int16_t buf[4096];
+  int n = pit_render(t, 44100, buf, (int)(sizeof buf / sizeof *buf));
+  if (n && host->audio) host->audio(host->ctx, buf, n);
+}
+
+// a video frame: its interrupts, then it is shown
+static void frame_step(void)
+{
+  uint64_t end = (game_frames + 1) * FRAME_CLOCKS;
+  interrupts_until(end);
+  game_frames++;
+  if (tNow < end) tNow = end;
+  synced = false;
+  host->present(host->ctx);
+  nextFrame += FRAME_US;
+  audio_until(end);
+}
 
 static void poll(bool wait)
 {
@@ -232,13 +376,9 @@ static void poll(bool wait)
     host->sleepUntil(host->ctx, nextFrame);
     t = nextFrame;
   }
-  while (t >= nextFrame)
-  {
-    if (timerFrame) timerFrame();
-    game_frames++;
-    host->present(host->ctx);
-    nextFrame += FRAME_US;
-  }
+  while (t >= nextFrame) frame_step();
+  uint64_t mid = game_frames * FRAME_CLOCKS + (synced ? 0 : FRAME_CLOCKS / 2);
+  if (tNow < mid) tNow = mid;
 }
 
 static void frame(void) { poll(true); }
@@ -301,6 +441,8 @@ static void start_timer_frame(void)
   if (*far_ptr(START_DS, 0x1BAF))
     for (uint16_t a = 0x1BA8; a <= 0x1BAB; a++) (*far_ptr(START_DS, a))++;
 }
+static bool start_hooked(void) { return *far_ptr(START_DS, 0x1BAF) != 0; }
+static const ProgTimer startTimer = { START_DS, 0x1BB0, 0x1BAC, true, start_hooked, start_timer_frame };
 
 static uint16_t bios_ticks(void *ctx)
 {
@@ -312,14 +454,52 @@ static uint16_t bios_ticks(void *ctx)
   return (uint16_t)t;
 }
 
-// the VGA's status (3DAh): each retrace is a frame's end, so that the waits for it take their real time
+// the VGA's status (3DAh): each retrace is a frame's end, so that the waits for it take their real time; a program
+// that saw it begin runs at the frame's start
 static uint16_t port_in(u16 port)
 {
   static uint8_t retrace;
-  if (port != 0x3DA) return 0;
-  retrace = !retrace;
-  if (retrace) frame();
-  return retrace ? 0x09 : 0x00;
+  uint8_t v;
+  if (port == 0x3DA)
+  {
+    retrace = !retrace;
+    if (retrace)
+    {
+      frame();
+      synced = true;
+      tNow = game_frames * FRAME_CLOCKS;
+    }
+    return retrace ? 0x09 : 0x00;
+  }
+  if (port == 0x40 && pit_ch0_mode2())
+  {
+    // the speaker driver's PWM songs: channel 0 its sample clock, polled with the interrupts masked (the time
+    // goes on as it reads; the frames with it, at the host's pace, and a key waiting shows in the BIOS's buffer)
+    tNow += 32;
+    if (tNow >= (game_frames + 1) * FRAME_CLOCKS)
+    {
+      uint64_t t = host->now(host->ctx);
+      if (t < nextFrame) host->sleepUntil(host->ctx, nextFrame);
+      frame_step();
+      uint16_t head = *(uint16_t *)far_ptr(0x40, 0x1A);
+      if (key_waiting()) w16(0x40, 0x1C, (uint16_t)(head + 2));
+    }
+  }
+  if (port == 0x201) return 0xFF;  // no joystick
+  if (pit_in(port, tNow, &v)) return v;
+  return 0;
+}
+
+static bool port_out(u16 port, u8 v) { return pit_out(port, v, tNow); }
+
+// the programs' calls of the sound driver: the loaded one's (the BIOS's keyboard buffer as it was after a song:
+// the key that ended it is still the host's)
+static bool sound_slot(int slot)
+{
+  if (!soundLoaded) return false;
+  is_slot(slot);
+  w16(0x40, 0x1C, *(uint16_t *)far_ptr(0x40, 0x1A));
+  return true;
 }
 
 static int run_start(void)
@@ -332,9 +512,9 @@ static int run_start(void)
   g_dsSeg = 0;
   start_attach(far_ptr(START_DS, 0), START_DS, GAME_SHARED_SEG, &h);
   exitCode = -1;
-  timerFrame = start_timer_frame;
+  timer = &startTimer;
   start_entry(GAME_PSP_SEG, e.ss, e.sp);
-  timerFrame = NULL;
+  timer = NULL;
   program_end();
   return exitCode;
 }
@@ -458,6 +638,8 @@ static void rp_timer_frame(void)
   if (*far_ptr(RP_DS, 0x303F))
     for (uint16_t a = 0x3038; a <= 0x303B; a++) (*far_ptr(RP_DS, a))++;
 }
+static bool rp_hooked(void) { return *far_ptr(RP_DS, 0x303F) != 0; }
+static const ProgTimer rpTimer = { RP_DS, 0x3040, 0x303C, true, rp_hooked, rp_timer_frame };
 
 static uint16_t rp_bios_ticks(void *ctx) { return bios_ticks(ctx); }
 
@@ -496,7 +678,7 @@ static void rp_start(void)
   rp_attach(far_ptr(RP_DS, 0), RP_DS, GAME_SHARED_SEG, &rh);
   keyHook = &rpKeys;
   keyDs = RP_DS;
-  timerFrame = rp_timer_frame;
+  timer = &rpTimer;
   rp_main(regs);
 }
 
@@ -561,6 +743,9 @@ static void duel_timer_frame(void)
   (*ticks)++;
   if (*down) (*down)--;
 }
+static bool duel_hooked(void) { return *(uint16_t *)far_ptr(0, 0x20) == 0x01FD && *(uint16_t *)far_ptr(0, 0x22) == 0x2CFF; }
+// (its handler does not call the fast tick)
+static const ProgTimer duelTimer = { DUEL_DS, 0x22A8, 0x22C6, false, duel_hooked, duel_timer_frame };
 
 static int run_duel(void)
 {
@@ -572,11 +757,11 @@ static int run_duel(void)
   duel_attach(far_ptr(DUEL_DS, 0), GAME_SHARED_SEG, &dh);
   keyHook = &duelKeys;
   keyDs = DUEL_DS;
-  timerFrame = duel_timer_frame;
+  timer = &duelTimer;
   duelCode = -1;
   duel_entry(GAME_PSP_SEG, e.ss, e.sp);
   keyHook = NULL;
-  timerFrame = NULL;
+  timer = NULL;
   dos_close_all();
   program_end();
   return duelCode;
@@ -600,6 +785,8 @@ static void battle_timer_frame(void)
   if (*(uint16_t *)far_ptr(0, 0x20) != 0x0160 || *(uint16_t *)far_ptr(0, 0x22) != 0x304F) return;
   (*(uint16_t *)far_ptr(BATTLE_DS, 0x1B44))++;
 }
+static bool battle_hooked(void) { return *(uint16_t *)far_ptr(0, 0x20) == 0x0160 && *(uint16_t *)far_ptr(0, 0x22) == 0x304F; }
+static const ProgTimer battleTimer = { BATTLE_DS, 0x1B2A, 0x1B46, true, battle_hooked, battle_timer_frame };
 
 static int run_battle(void)
 {
@@ -609,10 +796,10 @@ static int run_battle(void)
   bh.gameDir = host->gameDir;
   g_dsSeg = 0;
   battle_attach(far_ptr(BATTLE_DS, 0), GAME_SHARED_SEG, &bh);
-  timerFrame = battle_timer_frame;
+  timer = &battleTimer;
   duelCode = -1;
   battle_entry(GAME_PSP_SEG, e.ss, e.sp);
-  timerFrame = NULL;
+  timer = NULL;
   dos_close_all();
   program_end();
   return duelCode;
@@ -637,6 +824,8 @@ static void melee_timer_frame(void)
   for (int k = 0x46C6; k <= 0x46C9; k++) ds[k]++;
   if (ds[0x57]) (*(uint16_t *)(ds + 0x53))++;
 }
+static bool melee_hooked(void) { return *far_ptr(MELEE_DS, 0x46AB) != 0; }
+static const ProgTimer meleeTimer = { MELEE_DS, 0x46AC, 0x46CA, true, melee_hooked, melee_timer_frame };
 
 static int run_melee(void)
 {
@@ -648,11 +837,11 @@ static int run_melee(void)
   meleeexe_attach(far_ptr(MELEE_DS, 0), GAME_SHARED_SEG, &mh);
   keyHook = &meleeKeys;
   keyDs = MELEE_DS;
-  timerFrame = melee_timer_frame;
+  timer = &meleeTimer;
   duelCode = -1;
   meleeexe_entry(GAME_PSP_SEG, e.ss, e.sp);
   keyHook = NULL;
-  timerFrame = NULL;
+  timer = NULL;
   dos_close_all();
   program_end();
   return duelCode;
@@ -667,7 +856,7 @@ static void rp_subgame(void *ctx, int code)
 {
   (void)ctx;
   keyHook = NULL;
-  timerFrame = NULL;
+  timer = NULL;
   rp_close_files();
   program_end();
   int r = 1;
@@ -692,7 +881,7 @@ static int run_rp(void)
   exitCode = -1;
   if (!setjmp(rpExit)) rp_start();
   keyHook = NULL;
-  timerFrame = NULL;
+  timer = NULL;
   rp_close_files();
   program_end();
   return exitCode;
@@ -703,7 +892,12 @@ int game_run(const GameHost *h)
   if (!game_setup(h)) return -1;
   t0 = h->now(h->ctx);
   nextFrame = t0 + FRAME_US;
+  pit_reset();
+  tNow = lastIrq = 0;
+  game_frames = 0;
   asm_port_hook = port_in;
+  asm_port_out_hook = port_out;
+  asm_sound_slot = sound_slot;
   int code = run_start();
   // the launcher: RP and its exit codes (1-3 the action games, which RP runs itself while it hibernates: see
   // rp_rt.c; 4 a new game: START again; 0 the end)
@@ -713,5 +907,7 @@ int game_run(const GameHost *h)
     if (code == 1) code = run_rp();
   }
   asm_port_hook = NULL;
+  asm_port_out_hook = NULL;
+  asm_sound_slot = NULL;
   return code;
 }

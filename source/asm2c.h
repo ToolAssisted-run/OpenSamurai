@@ -182,6 +182,12 @@ u16 asm_msc_int86(u8 n, u16 in, u16 out, const MscErrno *e);
 extern bool (*asm_int_hook)(u8 n);
 // the ports a frontend serves (the VGA status 3DAh: the retrace, in real time): the value read
 extern u16 (*asm_port_hook)(u16 port);
+// the ports a frontend takes the writes of (the PIT, the speaker): true if it took it
+extern bool (*asm_port_out_hook)(u16 port, u8 value);
+// the sound driver a frontend loaded (the IBM speaker's, recompiled: isound.c): a call of its slot (0-6) with the
+// caller's far return address on the stack, which it returns to; false if there is none (the runtimes then do
+// the no-sound driver's)
+extern bool (*asm_sound_slot)(int slot);
 void asm_far_call(u16 seg, u16 off);  // a call through a far function pointer (rp_core.c)
 #define ASM_PORT_IN(p) asm_port_in(p)
 #define ASM_PORT_OUT(p, v) asm_port_out(p, v)

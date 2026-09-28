@@ -369,8 +369,76 @@ void RestoreContext(u16 seg)
 // not it: the label is not found, AX = 11FFh (AH still the search's function)
 i16 NotOriginalDisk(void) { return 0x11FF; }
 void DosPrint(i16 s) { (void)s; }
-void InstallTimer(void) { *P8(0x303f) = 1; }
-void RestoreTimer(void) {}
+// the timer (168c:0958; the MicroProse library's, as START's 1694:0810 is): its bytes at DS:3040 (B) --
+// B+0 the ticks' sum for the BIOS's tick (dword), +4 the count for the channel, +6 the count it has, +8 the times
+// it was set, +A the interrupts a frame (1, or the sound's fast rate), +C the interrupts until the next setting
+// (byte), +D the fast rate, +F a frame's length in PIT ticks, +13 in step with the retrace (byte), +14 the
+// interrupts until the frame's routine, +16 the lines it last waited; B-1 hooked (byte)
+#define TB 0x3040
+// the PIT's channel 0 at the start of a vertical retrace (168c:0B59): 0 if the retrace does not come
+static u16 retrace_count(void)
+{
+  u16 bx = 0;
+  do if (!--bx) return 0;
+  while (asm_port_in(0x3DA) & 8);
+  bx = 0;
+  do if (!--bx) return 0;
+  while (!(asm_port_in(0x3DA) & 8));
+  asm_port_out(0x43, 0);
+  u16 lo = asm_port_in(0x40) & 0xFF;
+  return (u16)(lo | (asm_port_in(0x40) & 0xFF) << 8);
+}
+// the frame's length (168c:0AB4): the counts at 17 retraces; a mode 3 count goes down by 2 a tick. A length
+// that does not make 4-6 fast interrupts of about 3977 ticks is not a VGA's: the timer runs at 60 Hz on its own
+static void measure_frame(void)
+{
+  *P8(TB + 0xC) = 1;
+  *P8(TB + 0x13) = 1;
+  u32 sum = 0;
+  u16 bx = retrace_count();
+  for (int k = 0; k < 16; k++)
+  {
+    u16 ax = retrace_count();
+    sum += (u16)(bx - ax);
+    bx = ax;
+  }
+  u32 acc = (u32)*P16(TB) | (u32)*P16(TB + 2) << 16;
+  acc += sum;
+  *P16(TB) = (u16)acc, *P16(TB + 2) = (u16)(acc >> 16);
+  u16 len = (u16)((sum / 16) >> 1);
+  u16 fast = (u16)((u16)(len + (len >> 4)) / 0xF89);
+  if (fast < 4 || fast > 6)
+  {
+    *P8(TB + 0x13) = 0;
+    len = 0x4DAE;
+    fast = 5;
+  }
+  *P16(TB + 0xF) = len;
+  *P16(TB + 0x11) = (u16)(sum >> 16);
+  *P16(TB + 0xD) = fast;
+  if (*P16(TB + 0xA) != 1) *P16(TB + 0xA) = fast;
+  *P16(TB + 6) = *P16(TB + 4) = (u16)(len / *P16(TB + 0xA));
+}
+// the handler hooked (INT 8: its address at 168c:09E1, the old one kept at 168c:0A49)
+void InstallTimer(void)
+{
+  *P16(TB + 0xA) = 1;
+  *P16(TB + 0x14) = 1;
+  *P16(TB) = 0, *P16(TB + 2) = 0;
+  measure_frame();
+  memcpy(far_ptr(0x2E58, 0x0A49), far_ptr(0, 0x20), 4);
+  memcpy(far_ptr(0, 0x20), far_ptr(0x2E58, 0x09E1), 4);
+  *P8(TB - 1) = 1;
+}
+// the BIOS's 18.2 Hz back, and its handler (168c:0996)
+void RestoreTimer(void)
+{
+  asm_port_out(0x43, 0x36);
+  asm_port_out(0x40, 0);
+  asm_port_out(0x40, 0);
+  memcpy(far_ptr(0, 0x20), far_ptr(0x2E58, 0x0A49), 4);
+  *P8(TB - 1) = 0;
+}
 void SaveVectors(void) {}
 void RestoreVectors(void) {}
 // a driver's entries into the stubs (168c:0CE7): the overlay header's first slot (+2E), count (+30), offsets
@@ -433,6 +501,7 @@ void rp_driver(int slot)
     mg_slot(slot);
     return;
   }
+  if (slot >= 100 && slot <= 106 && asm_sound_slot && asm_sound_slot(slot - 100)) return;  // the sound driver loaded
   u16 sp = R.sp;
   R.ax = rp_drv(slot, M16(SS, sp + 4), M16(SS, sp + 6), M16(SS, sp + 8), M16(SS, sp + 10), M16(SS, sp + 12), M16(SS, sp + 14), M16(SS, sp + 16), M16(SS, sp + 18));
   R.sp = (u16)(sp + 4);

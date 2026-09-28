@@ -13,6 +13,7 @@ testPrograms = {
   'meleeexetest' : 'the melee program against captures of the real game, tick by tick',
   'gametest' : 'the game as the launcher runs it, headless, from the game files',
   'battlesetuptest' : 'the battlefield, the enemy formation and the armies against captures',
+  'soundtest' : 'the IBM speaker driver against captures: its calls replayed, its port writes compared',
 }
 
 testExecutables = {}

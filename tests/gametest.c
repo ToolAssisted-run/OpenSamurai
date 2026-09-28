@@ -1,7 +1,7 @@
 // gametest GAMEDIR [START.snap FRAMES]: the game as the launcher runs it, headless: the drivers and START.EXE loaded
 // from the game's files and started from its entry (the C library's start-up), without keys, for FRAMES video
 // frames. With a capture of START (the workspace's oracle/st_ev.py), its state at main's entry is compared with
-// the one the start-up leaves.
+// the one the start-up leaves. SOUND=I: with the IBM speaker's driver; TIMER="FRAME ...": START's timer bytes.
 #include "asm2c.h"
 #include "game.h"
 #include "shared.h"
@@ -41,10 +41,24 @@ static void on_fn(uint32_t addr)
 static const char *script;
 static uint16_t pending[16];
 static int npending;
+// TIMER="FRAME ...": START's timer bytes (DS:1BA8-1BC7) printed at those frames
 static void present(void *ctx)
 {
   (void)ctx;
   if (++frames >= maxFrames) longjmp(stop, 1);
+  for (const char *p = getenv("TIMER"); p && *p;)
+  {
+    char *q;
+    long f = strtol(p, &q, 10);
+    if (q == p) break;
+    if (f == frames)
+    {
+      printf("frame %d, START's timer:", frames);
+      for (int k = 0x1BA8; k < 0x1BC8; k++) printf(" %02X", *far_ptr(0x2F4F, (uint16_t)k));
+      printf("\n");
+    }
+    p = q;
+  }
   for (const char *p = script; p && *p;)
   {
     char *q;
@@ -79,7 +93,7 @@ int main(int argc, char **argv)
 {
   setvbuf(stdout, NULL, _IOLBF, 0);
   if (argc < 2) { fprintf(stderr, "usage: gametest GAMEDIR [START.snap FRAMES]\n"); return 2; }
-  if (argc > 2)
+  if (argc > 2 && strcmp(argv[2], "-"))  // (- for none)
   {
     FILE *f = fopen(argv[2], "rb");
     if (!f || fseek(f, 8, SEEK_SET) || fread(mainDs, 1, sizeof mainDs, f) != sizeof mainDs || fread(mainSh, 1, SHARED_SIZE, f) != SHARED_SIZE) { fprintf(stderr, "cannot read %s\n", argv[2]); return 2; }
@@ -88,6 +102,7 @@ int main(int argc, char **argv)
   }
   if (argc > 3) maxFrames = atoi(argv[3]);
   GameHost h = { present, now_us, sleep_until, key_waiting, read_key, { 1989, 10, 25, 12, 0, 0, 0 }, argv[1], false, NULL };
+  if (getenv("SOUND")) h.sound = getenv("SOUND")[0];  // SOUND=I: the IBM speaker's driver
   start_trace = on_fn;
   rp_trace = rp_fn;
   script = getenv("KEYS");
