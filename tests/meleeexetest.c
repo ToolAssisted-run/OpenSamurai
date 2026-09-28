@@ -177,10 +177,12 @@ static void trace_fn(uint32_t addr)
   }
 }
 
+static bool exited;
 static void host_exit(void *ctx, int code)
 {
   (void)ctx;
   exitCode = code;
+  exited = true;
   longjmp(exitJump, 1);
 }
 
@@ -276,7 +278,7 @@ int main(int argc, char **argv)
   if (!r) meleeexe_main(regs);
   if (r == 2) printf("  gave up: too many differences in the inputs\n");
   if (r == 3) printf("  the end of the capture\n");
-  if (exitCode >= 0)
+  if (exited)
   {
     printf("  exit(%d)\n", exitCode);
     if (exitCheck >= 0)
@@ -290,5 +292,5 @@ int main(int argc, char **argv)
   else if (exitCheck >= 0) printf("  the C did not reach exit()\n");
   if (waitPos < nwaits && r != 1 && r != 3) printf("  the game waited %d more times\n", nwaits - waitPos);
   printf("%s: %d checkpoints, %d waits served of %d, %d checkpoints differ, %d input differences, %d out of step (%s)\n", argv[1], nchk, waitPos, nwaits, badChecks, errors, desync, stepMode ? "step" : "run");
-  return badChecks || errors || desync || (exitCheck >= 0 && exitCode < 0);
+  return badChecks || errors || desync || (exitCheck >= 0 && !exited);
 }
