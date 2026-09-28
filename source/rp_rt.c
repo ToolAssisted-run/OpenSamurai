@@ -359,7 +359,10 @@ void RestoreContext(u16 seg)
   for (u16 k = 0; k < 0x9760; k++) *P8(k) = *far_ptr(seg, (u16)(4 + k));
   if (host && host->restart && rp_resumeArmed) longjmp(rp_resume, 1);
 }
-i16 NotOriginalDisk(void) { return 0; }
+// is this not the original disk (168c:0120)? It looks for the drive's volume label (an FCB search) and compares it
+// with the original disk's: 0 the original (the saves and the Scroll of Honor are refused); the game's directory is
+// not it: the label is not found, AX = 11FFh (AH still the search's function)
+i16 NotOriginalDisk(void) { return 0x11FF; }
 void DosPrint(i16 s) { (void)s; }
 void InstallTimer(void) { *P8(0x303f) = 1; }
 void RestoreTimer(void) {}

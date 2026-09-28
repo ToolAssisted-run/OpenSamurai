@@ -8,7 +8,7 @@ The original game is a chain of separate DOS programs: a setup program, the titl
 
 ## Status
 
-The whole game plays: the title, the crest quiz, character creation, the role-playing game, and the duels, battles and melees it leads to. Each original program is rebuilt from its machine code and checked against the real game running in an emulator. Sound and the joystick are not in yet, and saving a game (the saved games are written to the game's folder) has not been tried in the frontend yet. The work is documented in [docs/FINDINGS.md](docs/FINDINGS.md).
+The whole game plays: the title, the crest quiz, character creation, the role-playing game, and the duels, battles and melees it leads to, with saved games. Each original program is rebuilt from its machine code and checked against the real game running in an emulator. Sound and the joystick are not in yet. The work is documented in [docs/FINDINGS.md](docs/FINDINGS.md).
 
 ## Building
 
@@ -22,7 +22,7 @@ The whole game plays: the title, the crest quiz, character creation, the role-pl
 
     build/frontend/opensamurai path/to/the/game
 
-Use the files of the original floppy disks: the copy protection (the crest quiz) is part of the game. `/NT` after the folder skips the title.
+Use the files of the original floppy disks: the copy protection (the crest quiz) is part of the game. Saved games (Alt-S at the Home Option scroll) are written to the game's folder, as the original does. `/NT` after the folder skips the title.
 
 ## License
 

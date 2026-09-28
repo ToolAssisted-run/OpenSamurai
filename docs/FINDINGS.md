@@ -327,8 +327,8 @@ handler counts them once it has hooked INT 8; RP's and DUEL's INT 9 handlers (a 
 from the frontend's scan codes. frontend/main.c: SDL2, mode 13h through the DAC, the BIOS's keys; scripted runs
 (OPENSAMURAI_KEYS, _SCANS, _SHOTS, _FRAMES, _FAST). The melee runs with its EGA driver, shown through the VGA
 emulation; a melee that turns into a duel runs the duel after it (the launcher's rule). RP's saved games are
-written to the game directory (not tried yet: Alt-S at the Home Option scroll did not open the save screen in a
-scripted run). Not yet: sound (the no-sound driver is the setup's choice), the joystick.
+written to the game directory (Alt-S at the Home Option scroll). RP refuses to save on the original disk
+(168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. Not yet: sound (the no-sound driver is the setup's choice), the joystick.
 
 Open: one RP capture of 16 (seed 14) differs after three sub-games in one tick (20 bytes of the character
 records), with the sub-games' own results replayed.
