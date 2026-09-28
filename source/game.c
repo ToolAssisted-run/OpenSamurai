@@ -45,6 +45,7 @@ static void w16(uint16_t seg, uint16_t off, uint16_t v)
   far_ptr(seg, off)[1] = (uint8_t)(v >> 8);
 }
 
+static void check_version(const char *name, const char *path);
 static bool game_file(const char *name, char *path, size_t n)
 {
   snprintf(path, n, "%s/%s", host->gameDir, name);
@@ -52,6 +53,7 @@ static bool game_file(const char *name, char *path, size_t n)
   if (f)
   {
     fclose(f);
+    check_version(name, path);
     return true;
   }
   // the names are the DOS ones: look for them in any case
@@ -61,8 +63,44 @@ static bool game_file(const char *name, char *path, size_t n)
   lower[k] = 0;
   snprintf(path, n, "%s/%s", host->gameDir, lower);
   f = fopen(path, "rb");
-  if (f) fclose(f);
+  if (f) fclose(f), check_version(name, path);
   return f != NULL;
+}
+
+// the files of the version the programs were rebuilt from (445.03: the floppy's; START.EXE also as the provided
+// directory has it, whose code the reconstruction does not use): another version's may not work
+static const struct { const char *name; uint32_t crc[2]; } knownFiles[] = {
+  { "START.EXE", { 0x51d8b8d6, 0x68a03249 } }, { "RP.EXE", { 0x1dd7c2d2 } }, { "DUEL.EXE", { 0x227aaf64 } },
+  { "BATTLE.EXE", { 0xd25c3efd } }, { "MELEE.EXE", { 0xa074f117 } }, { "MGRAPHIC.EXE", { 0xcb258ebc } },
+  { "EGRAPHIC.MEL", { 0x103c0a98 } }, { "MISC.EXE", { 0xd3028214 } }, { "NSOUND.SAM", { 0xec073332 } },
+  { "FONTS.SAM", { 0x3661164a } },
+};
+
+static uint32_t crc32_file(const char *path)
+{
+  FILE *f = fopen(path, "rb");
+  if (!f) return 0;
+  uint32_t c = 0xFFFFFFFF;
+  for (int b; (b = fgetc(f)) != EOF;)
+  {
+    c ^= (uint32_t)b;
+    for (int k = 0; k < 8; k++) c = (c >> 1) ^ (0xEDB88320 & -(c & 1));
+  }
+  fclose(f);
+  return ~c;
+}
+
+static void check_version(const char *name, const char *path)
+{
+  static bool warned[sizeof knownFiles / sizeof *knownFiles];
+  for (unsigned k = 0; k < sizeof knownFiles / sizeof *knownFiles; k++)
+    if (!strcmp(knownFiles[k].name, name) && !warned[k])
+    {
+      warned[k] = true;
+      uint32_t c = crc32_file(path);
+      if (c != knownFiles[k].crc[0] && c != knownFiles[k].crc[1])
+        fprintf(stderr, "opensamurai: %s is not the version the game was rebuilt from (445.03, the original floppy's): it may not work\n", name);
+    }
 }
 
 bool game_setup(const GameHost *h)
