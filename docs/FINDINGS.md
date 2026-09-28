@@ -598,6 +598,15 @@ slot 25 is a `retf` (the CGA palette tables are ignored); a 16-byte picture pale
 driver's master table (its segment D5, offset CE, 128 × 3 bytes, the first 16 the EGA colours), and a
 byte-per-pixel picture's values index that table.
 
+Rebellions (*code*, 133F:0EBA, the empty rival slots filled on the player's turn at rank 3 when the countdown DS:631A
+is 0, reset to random(2) while a slot stays empty): per empty slot, when DS:04BA == 1 (cleared at 48 provinces),
+the player owns more than 8 provinces, DS:7B9A is even and random(400) > 2 × generalship + troops: a random
+province of the player's other than the home one becomes the slot's (133F:0006(slot, 1, 3), favour −30 towards the
+player through 1568:06FC), then N = (random(8) × 5 + 15) × provinces / 100 (at least 1) more, each the first
+province of the player's (not the home one) adjacent to the rebel's (133F:13E4); 133F:063A rolls him for them;
+window 0x10F. Else a great clan (6/7, 1B28:1B68) or a new clan in a free province next to a daimyo's takes the
+slot.
+
 Ageing (*code*, 1568:013E every turn, characters 0..4 of the master block): family words + 0x2000 (a tenth of a
 year); age (+02, tenths) + 1; when age % 10 == 0 (years = age / 10): character 4 honor +1 (0434), generalship +1
 (0614), troops +2 (05BC, clamped to land), swordsmanship +1 (05E8); years ≥ 60 swordsmanship −4, ≥ 75 generalship
