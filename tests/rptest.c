@@ -29,6 +29,9 @@ static uint32_t MEM_BASE = 0x40000, MEM_LEN = 0x60000;
 typedef struct { uint32_t frame; uint64_t n; uint8_t *ds, *sh, *mem; } Tick;
 typedef enum { E_TICK, E_TIME, E_KEY, E_WAIT, E_SEED, E_KB90 } Kind;
 // the shared blocks the sub-games left (RP's main entries after them), in order
+static uint8_t (*subIvt)[0x80];  // the interrupt vectors 20h-3Fh then (DOS's and the sub-game's doing)
+static int nSubIvt, subIvtPos;
+static uint64_t *subIvtN;
 static uint8_t (*subShared)[SHARED_SIZE];
 static uint64_t *subSharedN;
 // RP's data segment at each exit (the capture's), in order: compared with the C's as a sub-game begins
@@ -154,9 +157,10 @@ static void host_subgame(void *ctx, int code)
   // the sub-game's results: as the capture has them at RP's next main entry, else the next tick's shared block
   memcpy(shared.b, subSharedPos < nSubShared ? subShared[subSharedPos++] : nextShared, SHARED_SIZE);
   shared_set_w(0x2c, flag);  // RP's own flag (it clears it when it resumes)
-  // the sub-game ends: DOS puts back the terminate, Ctrl-C and critical-error vectors from its PSP (its
-  // parent's: the launcher's, as RP's PSP has them)
-  memcpy(far_ptr(0, 0x88), far_ptr(0x27BC, 0x0A), 12);
+  // the vectors as the sub-game and DOS left them: the capture's at RP's next main entry, else DOS's putting back
+  // of the terminate, Ctrl-C and critical-error vectors from the PSP
+  if (subIvtPos < nSubIvt) memcpy(far_ptr(0, 0x80), subIvt[subIvtPos++], 0x80);
+  else memcpy(far_ptr(0, 0x88), far_ptr(0x27BC, 0x0A), 12);
 }
 static void host_exit(void *ctx, int code)
 {
@@ -175,8 +179,14 @@ static void hexbytes(const char *s, uint8_t *out, int n)
 static long calls;
 static uint32_t watchLin;  // WATCH=LINEAR (hex): the functions entered when the word there changes
 static uint16_t watchVal;
+static FILE *randLog;  // RANDLOG=FILE: rand()'s calls, the seed (as in memory) and the caller, as rand.txt has them
 static void count_fn(uint32_t addr)
 {
+  if (randLog && addr == 0x202E0A1C)
+  {
+    const uint8_t *sd = dsImage + 0x34FC;
+    fprintf(randLog, "%02x%02x%02x%02x %04X:%04X\n", sd[0], sd[1], sd[2], sd[3], *(u16a *)far_ptr(R.ss, (u16)(R.sp + 2)), *(u16a *)far_ptr(R.ss, R.sp));
+  }
   if (watchLin)
   {
     uint16_t v = *(uint16_t *)far_ptr((uint16_t)(watchLin >> 4), (uint16_t)(watchLin & 15));
@@ -283,6 +293,14 @@ int main(int argc, char **argv)
       hexbytes(p, exitDs[nExitDs++], DS_LEN);
       continue;
     }
+    else if (!strcmp(kind, "subivt"))  // the vectors 20h-3Fh at RP's next main entry
+    {
+      subIvt = realloc(subIvt, sizeof *subIvt * (size_t)(nSubIvt + 1));
+      subIvtN = realloc(subIvtN, sizeof *subIvtN * (size_t)(nSubIvt + 1));
+      subIvtN[nSubIvt] = e.n;
+      hexbytes(p, subIvt[nSubIvt++], 0x80);
+      continue;
+    }
     else if (!strcmp(kind, "subshared"))  // the shared block a sub-game left
     {
       subShared = realloc(subShared, sizeof *subShared * (size_t)(nSubShared + 1));
@@ -310,6 +328,7 @@ int main(int argc, char **argv)
   dsImage = ds;
   RpHost host = { host_time, host_key_waiting, host_read_key, host_frame_poll, host_seeded, host_bios_ticks, host_exit, host_subgame, argv[3], NULL };
   rp_attach(ds, DS_SEG, SHARED_SEG, &host);
+  if (getenv("RANDLOG")) randLog = fopen(getenv("RANDLOG"), "w");
   rp_set_arena(0x9000, 0x9FFF);
   if (argc > 5 && !strcmp(argv[4], "main"))
   {
@@ -359,6 +378,7 @@ int main(int argc, char **argv)
     while (evPos < nev && ev[evPos].n < a->n) evPos++;
     for (subSharedPos = 0; subSharedPos < nSubShared && subSharedN[subSharedPos] < a->n; subSharedPos++) {}
     for (exitDsPos = 0; exitDsPos < nExitDs && exitDsN[exitDsPos] < a->n; exitDsPos++) {}
+    for (subIvtPos = 0; subIvtPos < nSubIvt && subIvtN[subIvtPos] < a->n; subIvtPos++) {}
     uint16_t defaultRegs[9] = { 0x9736, 0x973C };
     const uint16_t *regs = g < ntsp ? tickRegs[g] : defaultRegs;
     errors = 0;

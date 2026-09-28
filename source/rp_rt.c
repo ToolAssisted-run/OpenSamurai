@@ -327,7 +327,9 @@ void rp_fatal_memory(i16 name, i16 suffix)
 
 // is the file on the disk in the drive (168c:0002)? It saves the critical-error vector (DS:05D2 segment, 05D4
 // offset) and puts its own, parses the name into the FCB at DS:05D7 (INT 21h 29h) and looks for it (11h), asking
-// for the other drive if not; here the game's files are all there: 0
+// for the other drive if not; here the game's files are all there: 0. Then it puts the vector back -- with the
+// offset read after DS became the saved segment (mov ds, [05D2]; mov dx, [05D4]): the word at that segment's 05D4
+// (DUEL's and BATTLE's disk checks do the same with theirs)
 i16 FileOnDisk(i16 name, i16 disk)
 {
   (void)disk;
@@ -342,6 +344,9 @@ i16 FileOnDisk(i16 name, i16 disk)
   while (*s && *s != '.') s++;
   if (*s == '.') s++;
   for (k = 0; *s && k < 3; s++) fcb[9 + k++] = (u8)(*s >= 'a' && *s <= 'z' ? *s - 32 : *s);
+  u16 seg = *P16(0x5D2);
+  *(u16a *)far_ptr(0, 0x90) = *(u16a *)far_ptr(seg, 0x5D4);
+  *(u16a *)far_ptr(0, 0x92) = seg;
   return 0;
 }
 // the hibernation: the data segment (DS:0000-975F: data, BSS, stack) at seg:0004, the stack pointer at seg:0000
