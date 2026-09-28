@@ -575,6 +575,28 @@ entries are zeroed. The +34 table (1568:0670(a, b, v) moves ch[b].+34[a] − ch[
 owes whom: a caught kidnapper or traitor gets ch[culprit].+34[victim] += 16 (177D:1E87, 2224), the rival helped
 in a defence ch[t].+34[helper] += half the troops lent (177D:08D5).
 
+The ending (*code*, and seen: OpenSamurai running it with the player given all 48 provinces at rank 3, the score set
+on the statistics screen). The scored ending 2567:0000 comes from the Shogun battle won (1B28:0148; lost: window
+0x10E and the game-over prompt) or from the main loop at rank 3 on the player's turn when 1568:0BAC(0) (provinces
+owned) = 48. Score DS:3DA2 = (signed byte) DS:1F22[d] (−70/−40/−10/0) + heir (1568:0048(0) ≠ −1: +50 if older
+than 15 years, else +30) + Σ v × w / 128 (2567:0B2E, truncated) for honor 40, troops 44, land 34, generalship 34, +
+(241 − S) × 54 / 241 if S < 241, S = the troops of characters 1..count−1 alive (shown × 100); no province term
+(the manual's "Province Control" is only displayed). Shogun points = score × 10 + 950. The verdict windows
+0x110..0x117 for score < 50, 51-80, 81-120, 121-152, 153-184, 185-224, 225-255, ≥ 256 — a score of exactly 50 has
+none (seen: straight to the Scroll prompt) — each with its WINPIC picture SHOGUN01..08 (WINDEF +2C indexes the
+WINPIC names directly). Honor is clamped to 1..112 by 1568:0434 before the family bonuses DS:0502 are added
+back; the index is heir | female << 1 | bit 12 << 2, and bit 12 is set in a wife's word (0x1801 + …), so 4 is
+the wife's bonus: wife 4 + heir 8 + two children 2 + 2 = 16 makes 128 honor possible, and the maximum score is
+256 on No-Dachi (Tanto 186, Wakizashi 216, Katana 246). The other endings go to 1568:00E2 without a score: the
+player's death without an heir (133F:0006 with index 0), refusing a demanded seppuku (window 0x87), a failed
+usurpation or assassination of the lord (0x87, with 0x3D first when random(100) ≤ 66), conquered as daimyo
+(0x134), the Shogun battle lost (0x10E), the lord's death after a failed quiz (24E2:0004). The pictures: MGRAPHIC's
+slot 25 is a `retf` (the CGA palette tables are ignored); a 16-byte picture palette selects entries of the
+driver's master table (its segment D5, offset CE, 128 × 3 bytes, the first 16 the EGA colours), and a
+byte-per-pixel picture's values index that table.
+
+OpenSamurai gap: rp_rt.c's `rp_fopen` is a stub, so the Scroll of Honor (HONOR.SCL) is neither read nor written.
+
 RP's random stream (*code*): the resume path after a fight (23BB:0222 after the context restore) does not call the
 seeding (1000:04C4): the generator state (DS:34FC) comes back with the data segment, and the resume only draws
 `random(8)` for the patience line. (reports/RP.md §6 says it reseeds; it does not.)
