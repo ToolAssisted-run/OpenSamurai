@@ -598,6 +598,13 @@ slot 25 is a `retf` (the CGA palette tables are ignored); a 16-byte picture pale
 driver's master table (its segment D5, offset CE, 128 × 3 bytes, the first 16 the EGA colours), and a
 byte-per-pixel picture's values index that table.
 
+Promotions (*code*, 133F:1B40(rank)): the characters are regenerated from index 0 only at rank 1 (a new game), from
+index 1 at a promotion, so the player keeps the record (name, age, family) and is scaled, clamped 1..128: to
+hatamoto land × 2/10, troops × 2/10, honor × 75/100, swordsmanship × 6/10, generalship / 2; to daimyo honor ×
+75/100, land / 2, troops = 1568:0A68 (the daimyo's limit), swordsmanship × 6/10, generalship / 2. The family
+advantage (shared+30E) is applied inside the loop at index 0, so only at creation. The lord's five attributes are
+set to 122.
+
 The travel encounters (*code*; the terrain names from MAP1.DAT's grid against OpenSamurai's screen of Satsuma).
 The walking loop 2706:0000 zeroes the trip's count DS:3DB4, and whenever `time()` passes a deadline 5 s ahead
 (about every 5-6 s, walking or not) calls 2706:0C0A with the tile under the figure (grid 20 × 20, cell 16 × 10 px,
