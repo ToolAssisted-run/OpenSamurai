@@ -598,6 +598,12 @@ slot 25 is a `retf` (the CGA palette tables are ignored); a 16-byte picture pale
 driver's master table (its segment D5, offset CE, 128 × 3 bytes, the first 16 the EGA colours), and a
 byte-per-pixel picture's values index that table.
 
+Ageing (*code*, 1568:013E every turn, characters 0..4 of the master block): family words + 0x2000 (a tenth of a
+year); age (+02, tenths) + 1; when age % 10 == 0 (years = age / 10): character 4 honor +1 (0434), generalship +1
+(0614), troops +2 (05BC, clamped to land), swordsmanship +1 (05E8); years ≥ 60 swordsmanship −4, ≥ 75 generalship
+−4, ≥ 90 and the player DS:8546 = 1 (only Retire and Seppuku); then swordsmanship and generalship clamped 1..128.
+The lord (5) does not age here.
+
 Taking the lord's place (*code*). Usurpation (177D:3132 at the lord's castle): battle 00BA(6, 5, troops, 7ED8)
 lost ⇒ window 0x87 and game over; castle melee 0008(5, 5, 5, 1) with shared+28 cleared for it, player fallen or no
 duel ⇒ (0x3D with the difficulty's odds) 0x87, game over; duel 019E(2, 5, 7EDA) lost ⇒ 0x3D, 0x87, game over; won ⇒
