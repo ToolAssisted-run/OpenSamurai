@@ -20,7 +20,7 @@ static uint16_t keys[64];
 static int keyHead, keyTail;
 // for scripted runs: OPENSAMURAI_KEYS="FRAME:KEY ..." (KEY hexadecimal, the BIOS's), OPENSAMURAI_SHOTS="FRAME ..."
 // (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting;
-// OPENSAMURAI_WAV=FILE: the sound written to a WAV file
+// OPENSAMURAI_WAV=FILE: the sound written to a WAV file; OPENSAMURAI_MIDI=FILE: the MT-32's MIDI to a MIDI file
 static long frameCount, lastFrame = -1;
 static const char *scriptKeys, *scriptShots, *scriptScans;
 // OPENSAMURAI_SCANS="FRAME:+SS FRAME:-SS ..." (SS the PC's scan code, hexadecimal; +e/-e for the grey keys): the
@@ -313,6 +313,69 @@ static void audio(void *ctx, const int16_t *samples, int n)
   if (audioDevice && SDL_GetQueuedAudioSize(audioDevice) < 44100 / 4 * 2) SDL_QueueAudio(audioDevice, samples, (Uint32)n * 2);
 }
 
+// the MT-32's MIDI (/AR): to OPENSAMURAI_MIDI, a standard MIDI file (one track; a tick a sample: 22050 a quarter
+// note at 120 a minute), its messages split from the stream (running status, SysEx)
+static FILE *midiFile;
+static uint64_t midiLast;
+static uint8_t msg[512], runStatus;
+static int msgLen, msgWant;
+static void put_var(uint32_t v, FILE *f)
+{
+  uint8_t b[5];
+  int n = 0;
+  do b[n++] = (uint8_t)(v & 0x7F), v >>= 7;
+  while (v);
+  while (n--) fputc(b[n] | (n ? 0x80 : 0), f);
+}
+static void midi_event(uint64_t sample)
+{
+  if (!midiFile) return;
+  if (!ftell(midiFile))
+  {
+    fwrite("MThd\0\0\0\6\0\0\0\1\x56\x22MTrk\0\0\0\0", 1, 22, midiFile);  // (the track's length at the end)
+    midiLast = sample;
+  }
+  put_var((uint32_t)(sample - midiLast), midiFile);
+  midiLast = sample;
+  if (msg[0] == 0xF0)
+  {
+    fputc(0xF0, midiFile);
+    put_var((uint32_t)(msgLen - 1), midiFile);
+    fwrite(msg + 1, 1, (size_t)(msgLen - 1), midiFile);
+  }
+  else fwrite(msg, 1, (size_t)msgLen, midiFile);
+}
+static void midi(void *ctx, uint8_t b, uint64_t sample)
+{
+  (void)ctx;
+  if (b >= 0xF8) return;  // (real-time messages)
+  if (b & 0x80)
+  {
+    if (b == 0xF7 && msgLen && msg[0] == 0xF0) { msg[msgLen++] = b; midi_event(sample); msgLen = 0; return; }
+    msgLen = 0;
+    msg[msgLen++] = b;
+    if (b < 0xF0) runStatus = b;
+    msgWant = b == 0xF0 ? -1 : (b & 0xE0) == 0xC0 ? 2 : b < 0xF0 ? 3 : 1;
+  }
+  else
+  {
+    if (!msgLen) { if (!runStatus) return; msg[msgLen++] = runStatus; msgWant = (runStatus & 0xE0) == 0xC0 ? 2 : 3; }
+    if (msgLen < (int)sizeof msg) msg[msgLen++] = b;
+  }
+  if (msgWant > 0 && msgLen == msgWant) { midi_event(sample); msgLen = 0; }
+}
+static void midi_file_end(void)
+{
+  if (ftell(midiFile)) fwrite("\0\xFF\x2F\0", 1, 4, midiFile);
+  long len = ftell(midiFile) - 22;
+  if (len >= 0)
+  {
+    fseek(midiFile, 18, SEEK_SET);
+    for (int k = 3; k >= 0; k--) fputc((int)(len >> 8 * k) & 0xFF, midiFile);
+  }
+  fclose(midiFile);
+}
+
 int main(int argc, char **argv)
 {
   if (argc < 2)
@@ -329,18 +392,19 @@ int main(int argc, char **argv)
   struct tm *tm = localtime(&t);
   GameHost host = { present, now_us, sleep_until, key_waiting, read_key,
                     { tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, 0 },
-                    argv[1], false, NULL, 'A', audio };
+                    argv[1], false, NULL, 'A', audio, midi };
   // the setup's arguments: /NT no title, /A<letter> the sound driver (A the AdLib, the default; I the IBM speaker,
-  // T Tandy's, N none)
+  // T Tandy's, R the MT-32's, N none)
   for (int k = 2; k < argc; k++)
     if (!strcasecmp(argv[k], "/NT")) host.noTitle = true;
     else if ((argv[k][0] == '/' || argv[k][0] == '-') && (argv[k][1] == 'A' || argv[k][1] == 'a') && argv[k][2])
       host.sound = (char)toupper((unsigned char)argv[k][2]);
-  if (!strchr("ITAN", host.sound))
+  if (!strchr("ITARN", host.sound))
   {
-    fprintf(stderr, "opensamurai: the reconstruction has the AdLib's sound driver (/AA), the IBM speaker's (/AI), Tandy's (/AT) or none (/AN)\n");
+    fprintf(stderr, "opensamurai: the reconstruction has the AdLib's sound driver (/AA), the IBM speaker's (/AI), Tandy's (/AT), the MT-32's (/AR) or none (/AN)\n");
     host.sound = 'A';
   }
+  if (getenv("OPENSAMURAI_MIDI")) midiFile = fopen(getenv("OPENSAMURAI_MIDI"), "wb");
   if (SDL_Init(SDL_INIT_VIDEO | (host.sound != 'N' ? SDL_INIT_AUDIO : 0)))
   {
     fprintf(stderr, "opensamurai: %s\n", SDL_GetError());
@@ -365,6 +429,7 @@ int main(int argc, char **argv)
   texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 200);
   int code = game_run(&host);
   if (wav) wav_header(wavSamples), fclose(wav);
+  if (midiFile) midi_file_end();
   if (audioDevice) SDL_CloseAudioDevice(audioDevice);
   if (code < 0) fprintf(stderr, "opensamurai: the game's files are not all in %s (MISC.EXE, NSOUND.SAM, MGRAPHIC.EXE, FONTS.SAM, START.EXE, ...)\n", argv[1]);
   SDL_Quit();

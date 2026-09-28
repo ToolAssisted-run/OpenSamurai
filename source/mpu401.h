@@ -1,0 +1,14 @@
+// The Roland MPU-401 MIDI interface at 330h (data) and 331h (status and commands), as the MT-32's driver uses it:
+// its reset and its UART mode, each acknowledged; in the UART mode the data bytes are MIDI, to the host (mpu401.c)
+#ifndef OPENSAMURAI_MPU401_H
+#define OPENSAMURAI_MPU401_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+void mpu_reset(void);
+// a write at time t (PIT ticks): false if not the interface's port; a MIDI byte goes to midi(byte, t)
+bool mpu_out(uint16_t port, uint8_t value, uint64_t t, void (*midi)(uint8_t byte, uint64_t t));
+bool mpu_in(uint16_t port, uint8_t *value);
+
+#endif

@@ -329,8 +329,8 @@ from the frontend's scan codes. frontend/main.c: SDL2, mode 13h through the DAC,
 emulation; a melee that turns into a duel runs the duel after it (the launcher's rule). RP's saved games are
 written to the game directory (Alt-S at the Home Option scroll). RP refuses to save on the original disk
 (168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. The IBM speaker's and Tandy's
-sounds are the frontend's `/AI` and `/AT` (5.8, 5.9), the AdLib's `/AA`, the default (5.10). Not yet: the MT-32, the
-joystick.
+sounds are the frontend's `/AI` and `/AT` (5.8, 5.9), the AdLib's `/AA`, the default (5.10); the MT-32's driver `/AR` runs, its MIDI
+not yet sounded (5.11). Not yet: the joystick.
 
 Seed 14 (three sub-games in one tick) needed two things: the test replaying each sub-game's own results (the
 shared block at RP's next main entry; the test had been falling back to the next tick's), and FileOnDisk's putting
@@ -410,6 +410,22 @@ and noise, the timers), at the chip's 49716 samples a second. Verification: test
 calls) and 8 captures of the role-playing game (about 21,200 calls each) identical; the chip model's sound of the
 title's writes (tests/oplrender.c) against DOSBox-X's recording of the same frames (oracle-run's audio): the
 short-time log spectra's correlation 0.984 (median of 810 windows of 93 ms), the same pitches, the same loudness.
+
+### 5.11 Sound: the Roland MT-32 (RSOUND.SAM) — recompiled whole in source/rsound.c, verified
+
+The MT-32's driver (MIDI_Samurai 10-30-89) talks to an MPU-401 at [137C] (330h): its hardware start (slot 5)
+resets it (FFh to 331h, the acknowledgement FEh read from 330h) and puts it in the UART mode (3Fh, acknowledged);
+each MIDI byte waits for the status's bit 6, is written to 330h, and what the interface sends back is read while
+bit 7 says so. Like the floppy's AdLib driver it times a loop with the PIT and divides by the time (a delay's
+count for its SysEx messages). Its voices call routines through [bx+1Ch] (03A5h, 07CBh: roots); slot 4 waits for
+the tick for musics 0 and 5 (0x09C1). Its note table (DS:2816, a byte a channel) lies past its file's image, in
+memory the launcher leaves as it was (the setup program's leftovers: in the real game BA 69 0A E9 56 FF 07 CB): the
+first note off on a channel sends that byte as the note (E9h: not even a data byte). The reconstruction's memory
+there is zeros: its first note offs are of note 0. source/mpu401.c models the interface; the MIDI goes to the host
+(GameHost.midi), and the frontend writes it to a MIDI file (OPENSAMURAI_MIDI) for now: an MT-32's sound needs a
+synthesizer. Verification: tests/soundtest.c on 8 captures of the role-playing game (about 21,400 calls each), the
+driver's memory past its image as the real game's (MEM=, a dump of the oracle's memory before the driver starts):
+identical.
 
 ## 6. Methods
 

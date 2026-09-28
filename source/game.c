@@ -21,13 +21,14 @@
 #include "pit.h"
 #include "tandy.h"
 #include "opl.h"
+#include "mpu401.h"
 
 #include <setjmp.h>
 #include <time.h>
 
 static const GameHost *host;
 // the sound driver loaded at GAME_SOUND_DRIVER_SEG: 'I' the IBM speaker's (isound.c), 'T' Tandy's (tsound.c), 'A' the
-// AdLib's (asound.c); 0 the no-sound driver (the runtimes' own)
+// AdLib's (asound.c), 'R' the MT-32's (rsound.c); 0 the no-sound driver (the runtimes' own)
 static char soundDriver;
 
 // the BIOS's keyboard buffer: the host's keys, with one taken ahead for a look (INT 16h/01)
@@ -139,7 +140,7 @@ bool game_setup(const GameHost *h)
   if (!game_file("MISC.EXE", path, sizeof path) || !exe_load(path, GAME_MISC_SEG, &e)) return false;
   if (!game_file("NSOUND.SAM", path, sizeof path) || !exe_load(path, GAME_SOUND_SEG, &e)) return false;
   soundDriver = 0;
-  const char *driverFile = h->sound == 'I' ? "ISOUND.SAM" : h->sound == 'T' ? "TSOUND.SAM" : h->sound == 'A' ? "ASOUND.SAM" : NULL;
+  const char *driverFile = h->sound == 'I' ? "ISOUND.SAM" : h->sound == 'T' ? "TSOUND.SAM" : h->sound == 'A' ? "ASOUND.SAM" : h->sound == 'R' ? "RSOUND.SAM" : NULL;
   if (driverFile)
   {
     if (!game_file(driverFile, path, sizeof path) || !exe_load(path, GAME_SOUND_DRIVER_SEG, &e)) return false;
@@ -262,11 +263,18 @@ static const ProgTimer *timer;  // the running program's
 void is_slot(int slot);
 void ts_slot(int slot);
 void as_slot(int slot);
+void rs_slot(int slot);
 static void driver_slot(int slot)
 {
   if (soundDriver == 'I') is_slot(slot);
   else if (soundDriver == 'T') ts_slot(slot);
-  else as_slot(slot);
+  else if (soundDriver == 'A') as_slot(slot);
+  else rs_slot(slot);
+}
+// the MT-32's MIDI, to the host with its time (the audio's samples)
+static void game_midi(uint8_t byte, uint64_t t)
+{
+  if (host->midi) host->midi(host->ctx, byte, t * 44100 / PIT_HZ);
 }
 static uint16_t sound_call(int slot)
 {
@@ -509,10 +517,14 @@ static uint16_t port_in(u16 port)
     tNow += 1;
     if (opl_in(port, tNow, &v)) return v;
   }
+  if (mpu_in(port, &v)) return v;
   return 0;
 }
 
-static bool port_out(u16 port, u8 v) { return pit_out(port, v, tNow) || tandy_out(port, v, tNow) || opl_out(port, v, tNow); }
+static bool port_out(u16 port, u8 v)
+{
+  return pit_out(port, v, tNow) || tandy_out(port, v, tNow) || opl_out(port, v, tNow) || mpu_out(port, v, tNow, game_midi);
+}
 
 // the programs' calls of the sound driver: the loaded one's (the BIOS's keyboard buffer as it was after a song:
 // the key that ended it is still the host's)
@@ -917,6 +929,7 @@ int game_run(const GameHost *h)
   pit_reset();
   tandy_reset();
   opl_reset();
+  mpu_reset();
   tNow = lastIrq = 0;
   game_frames = 0;
   asm_port_hook = port_in;

@@ -24,9 +24,11 @@ typedef struct
   bool noTitle;  // /NT: no title sequence
   void *ctx;
   char sound;    // the setup's sound driver (its name's letter, as the setup's /A<letter>): 'I' the IBM speaker, 'T'
-                 // Tandy's, 'A' the AdLib, else none
+                 // Tandy's, 'A' the AdLib, 'R' the Roland MT-32 (its MIDI to midi), else none
   // the speaker's sound, as each frame ends: 44100 samples a second, mono (NULL: not wanted)
   void (*audio)(void *ctx, const int16_t *samples, int n);
+  // the MT-32's MIDI (sound 'R'), a byte at a time, with its time in the audio's samples (NULL: not wanted)
+  void (*midi)(void *ctx, uint8_t byte, uint64_t sample);
 } GameHost;
 
 // The video frames (70.086 a second, the VGA's): their count so far

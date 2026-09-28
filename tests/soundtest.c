@@ -1,5 +1,6 @@
-// soundtest SND.TXT GAMEDIR [I|T|A]: a sound driver (I: the IBM speaker's, ISOUND.SAM: isound.c; T: Tandy's, TSOUND.SAM:
-// tsound.c; A: the AdLib's, ASOUND.SAM of 1-10-94: asound.c; recompiled whole) against a capture of
+// soundtest SND.TXT GAMEDIR [I|T|A|R]: a sound driver (I: the IBM speaker's, ISOUND.SAM: isound.c; T: Tandy's, TSOUND.SAM:
+// tsound.c; A: the AdLib's, ASOUND.SAM of 1-10-94: asound.c; R: the MT-32's, RSOUND.SAM:
+// rsound.c; recompiled whole) against a capture of
 // the real one (the workspace's oracle/cap_snd.sh + snd_ev.py): the driver's slot calls as the game made them,
 // the port reads as the game got them, and every port write compared. The PWM player's polls of the PIT's channel
 // 0 (04A8, the loop's timing, not captured) are answered by a counter that wraps every fourth read, and its latch
@@ -18,6 +19,7 @@
 void is_slot(int slot);
 void ts_slot(int slot);
 void as_slot(int slot);
+void rs_slot(int slot);
 static char drv = 'I';
 
 typedef struct
@@ -81,11 +83,13 @@ static void idle(void)
 }
 
 static u8 pit0 = 0x7e;
+static long traceFrom = -1;  // TRACE=EVENT: the C's port accesses from that event on
 static u16 port_in(u16 port)
 {
+  if (traceFrom >= 0 && pos >= traceFrom && pos < traceFrom + 60) printf("    C in %03X at event %d\n", port, pos);
   interrupts();
   keys();
-  if (port == 0x40)
+  if (port == 0x40 && !(pos < nev && ev[pos].kind == 'i' && ev[pos].a == 0x40))  // (a speed test's reads are captured)
   {
     pit0 = (u8)(pit0 < 0x30 ? 0x7e : pit0 - 0x20);
     return pit0;
@@ -106,9 +110,10 @@ static u16 port_in(u16 port)
 
 static bool port_out(u16 port, u8 v)
 {
+  if (traceFrom >= 0 && pos >= traceFrom && pos < traceFrom + 60) printf("    C out %03X %02X at event %d\n", port, v, pos);
   interrupts();
   keys();
-  if (port == 0x43 && v == 0x00) return true;  // the PWM loop's latch
+  if (drv == 'I' && port == 0x43 && v == 0x00) return true;  // the speaker's PWM loop's latch
   if (pos < nev && ev[pos].kind == 'o' && ev[pos].a == port && ev[pos].b == v) pos++;
   else fail("writes", port, v);
   keys();
@@ -123,6 +128,7 @@ static void call(int slot, u16 arg)
   depth++;
   if (drv == 'T') ts_slot(slot);
   else if (drv == 'A') as_slot(slot);
+  else if (drv == 'R') rs_slot(slot);
   else is_slot(slot);
   depth--;
   R.sp += 2;
@@ -136,8 +142,9 @@ static void call(int slot, u16 arg)
 
 int main(int argc, char **argv)
 {
-  if (argc < 3) { fprintf(stderr, "usage: soundtest SND.TXT GAMEDIR [I|T|A]\n"); return 2; }
+  if (argc < 3) { fprintf(stderr, "usage: soundtest SND.TXT GAMEDIR [I|T|A|R]\n"); return 2; }
   if (argc > 3) drv = argv[3][0];
+  if (getenv("TRACE")) traceFrom = atol(getenv("TRACE"));
   FILE *f = fopen(argv[1], "r");
   if (!f) { fprintf(stderr, "cannot read %s\n", argv[1]); return 2; }
   char line[256];
@@ -152,9 +159,21 @@ int main(int argc, char **argv)
   }
   fclose(f);
   char path[1024];
-  snprintf(path, sizeof path, "%s/%s", argv[2], drv == 'T' ? "TSOUND.SAM" : drv == 'A' ? "ASOUND.SAM" : "ISOUND.SAM");
+  snprintf(path, sizeof path, "%s/%s", argv[2], drv == 'T' ? "TSOUND.SAM" : drv == 'A' ? "ASOUND.SAM" : drv == 'R' ? "RSOUND.SAM" : "ISOUND.SAM");
   ExeInfo info;
   if (!exe_load(path, 0xD000, &info)) { fprintf(stderr, "cannot load %s\n", path); return 2; }
+  // MEM=DUMP (the real game's conventional memory before the driver's start; its driver at 19AA): what lies after
+  // the driver's image to its data segment's end, which the driver reads before it writes (the MT-32's note table
+  // holds what was in memory there)
+  if (getenv("MEM"))
+  {
+    FILE *m = fopen(getenv("MEM"), "rb");
+    static uint8_t dump[0xA0000];
+    if (!m || fread(dump, 1, sizeof dump, m) != sizeof dump) { fprintf(stderr, "cannot read %s\n", getenv("MEM")); return 2; }
+    fclose(m);
+    uint32_t from = (uint32_t)info.imageParagraphs * 16, to = 0x20000;
+    for (uint32_t a = from; a < to && 0x19AA0 + a < sizeof dump; a++) *far_ptr((u16)(0xD000 + (a >> 4)), (u16)(a & 15)) = dump[0x19AA0 + a];
+  }
   // the shared block's segment at 0000:04F0 (the driver reads the joystick flag there, +34: none)
   g_sharedSeg = 0x1942;  // (segment 0 is memory, not the shared block)
   *(u16a *)far_ptr(0, 0x4F0) = 0x1942;
