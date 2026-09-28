@@ -1,4 +1,4 @@
-// opensamurai GAMEDIR [/NT] [/AI|/AT]: the game in a window. The screen is the VGA's mode 13h (VRAM at A000, the DAC's
+// opensamurai GAMEDIR [/NT] [/AA|/AI|/AT|/AN]: the game in a window. The screen is the VGA's mode 13h (VRAM at A000, the DAC's
 // palette), 70 frames a second as on the VGA; the keyboard gives the BIOS's keys.
 #include <SDL.h>
 #include <ctype.h>
@@ -317,7 +317,7 @@ int main(int argc, char **argv)
 {
   if (argc < 2)
   {
-    fprintf(stderr, "usage: opensamurai GAMEDIR [/NT] [/AI|/AT]\n  GAMEDIR: the game's files (the original floppy's)\n  /NT: no title; /AI: the IBM speaker's sound; /AT: Tandy's\n");
+    fprintf(stderr, "usage: opensamurai GAMEDIR [/NT] [/AA|/AI|/AT|/AN]\n  GAMEDIR: the game's files (the original floppy's)\n  /NT: no title; the sound: /AA the AdLib's (the default), /AI the IBM speaker's, /AT Tandy's, /AN none\n");
     return 2;
   }
   scriptKeys = getenv("OPENSAMURAI_KEYS");
@@ -329,16 +329,17 @@ int main(int argc, char **argv)
   struct tm *tm = localtime(&t);
   GameHost host = { present, now_us, sleep_until, key_waiting, read_key,
                     { tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, 0 },
-                    argv[1], false, NULL, 'N', audio };
-  // the setup's arguments: /NT no title, /A<letter> the sound driver (I the IBM speaker, T Tandy's, N none)
+                    argv[1], false, NULL, 'A', audio };
+  // the setup's arguments: /NT no title, /A<letter> the sound driver (A the AdLib, the default; I the IBM speaker,
+  // T Tandy's, N none)
   for (int k = 2; k < argc; k++)
     if (!strcasecmp(argv[k], "/NT")) host.noTitle = true;
     else if ((argv[k][0] == '/' || argv[k][0] == '-') && (argv[k][1] == 'A' || argv[k][1] == 'a') && argv[k][2])
       host.sound = (char)toupper((unsigned char)argv[k][2]);
-  if (host.sound != 'I' && host.sound != 'T' && host.sound != 'N')
+  if (!strchr("ITAN", host.sound))
   {
-    fprintf(stderr, "opensamurai: the reconstruction has the IBM speaker's sound driver (/AI), Tandy's (/AT) or none (/AN)\n");
-    host.sound = 'N';
+    fprintf(stderr, "opensamurai: the reconstruction has the AdLib's sound driver (/AA), the IBM speaker's (/AI), Tandy's (/AT) or none (/AN)\n");
+    host.sound = 'A';
   }
   if (SDL_Init(SDL_INIT_VIDEO | (host.sound != 'N' ? SDL_INIT_AUDIO : 0)))
   {

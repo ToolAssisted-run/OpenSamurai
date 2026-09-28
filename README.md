@@ -8,7 +8,7 @@ The original game is a chain of separate DOS programs: a setup program, the titl
 
 ## Status
 
-The whole game plays: the title, the crest quiz, character creation, the role-playing game, and the duels, battles and melees it leads to, with saved games. Each original program is rebuilt from its machine code and checked against the real game running in an emulator. The IBM PC speaker's sound is in; the other sound boards and the joystick are not yet. The work is documented in [docs/FINDINGS.md](docs/FINDINGS.md).
+The whole game plays: the title, the crest quiz, character creation, the role-playing game, and the duels, battles and melees it leads to, with saved games. Each original program is rebuilt from its machine code and checked against the real game running in an emulator. The sound of the AdLib, the IBM PC speaker and the Tandy is in; the Roland MT-32 and the joystick are not yet. The work is documented in [docs/FINDINGS.md](docs/FINDINGS.md).
 
 ## Building
 
@@ -22,7 +22,7 @@ The whole game plays: the title, the crest quiz, character creation, the role-pl
 
     build/frontend/opensamurai path/to/the/game
 
-Use the files of the original floppy disks: the copy protection (the crest quiz) is part of the game. Saved games (Alt-S at the Home Option scroll) are written to the game's folder, as the original does. After the folder, `/NT` skips the title and `/AI` plays the sound through the IBM PC speaker's driver (the setup's "IBM" choice; without it there is no sound, as with the setup's "none"). With the speaker's driver the start-up program runs slower, as it does in the original (see docs/FINDINGS.md, 5.8).
+Use the files of the original floppy disks: the copy protection (the crest quiz) is part of the game. Saved games (Alt-S at the Home Option scroll) are written to the game's folder, as the original does. After the folder, `/NT` skips the title, and `/A` and a letter chooses the sound as the original's setup does: `/AA` the AdLib (the default), `/AI` the IBM PC speaker, `/AT` the Tandy, `/AN` none. With the speaker the start-up program runs slower, as it does in the original (see docs/FINDINGS.md, 5.8). The AdLib driver is the later one (1-10-94) that the game's later releases have.
 
 ## License
 

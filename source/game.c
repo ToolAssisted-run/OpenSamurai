@@ -20,13 +20,14 @@
 #include "meleeexe.h"
 #include "pit.h"
 #include "tandy.h"
+#include "opl.h"
 
 #include <setjmp.h>
 #include <time.h>
 
 static const GameHost *host;
-// the sound driver loaded at GAME_SOUND_DRIVER_SEG: 'I' the IBM speaker's (isound.c), 'T' Tandy's (tsound.c); 0 the
-// no-sound driver (the runtimes' own)
+// the sound driver loaded at GAME_SOUND_DRIVER_SEG: 'I' the IBM speaker's (isound.c), 'T' Tandy's (tsound.c), 'A' the
+// AdLib's (asound.c); 0 the no-sound driver (the runtimes' own)
 static char soundDriver;
 
 // the BIOS's keyboard buffer: the host's keys, with one taken ahead for a look (INT 16h/01)
@@ -80,6 +81,7 @@ static const struct { const char *name; uint32_t crc[2]; } knownFiles[] = {
   { "BATTLE.EXE", { 0xd25c3efd } }, { "MELEE.EXE", { 0xa074f117 } }, { "MGRAPHIC.EXE", { 0xcb258ebc } },
   { "EGRAPHIC.MEL", { 0x103c0a98 } }, { "MISC.EXE", { 0xd3028214 } }, { "NSOUND.SAM", { 0xec073332 } },
   { "FONTS.SAM", { 0x3661164a } }, { "ISOUND.SAM", { 0x057e152a } }, { "TSOUND.SAM", { 0xabf415d0 } },
+  { "ASOUND.SAM", { 0xa3a2b56f } },  // (the AdLib driver of 1-10-94: a later one than the floppy's)
 };
 
 static uint32_t crc32_file(const char *path)
@@ -137,7 +139,7 @@ bool game_setup(const GameHost *h)
   if (!game_file("MISC.EXE", path, sizeof path) || !exe_load(path, GAME_MISC_SEG, &e)) return false;
   if (!game_file("NSOUND.SAM", path, sizeof path) || !exe_load(path, GAME_SOUND_SEG, &e)) return false;
   soundDriver = 0;
-  const char *driverFile = h->sound == 'I' ? "ISOUND.SAM" : h->sound == 'T' ? "TSOUND.SAM" : NULL;
+  const char *driverFile = h->sound == 'I' ? "ISOUND.SAM" : h->sound == 'T' ? "TSOUND.SAM" : h->sound == 'A' ? "ASOUND.SAM" : NULL;
   if (driverFile)
   {
     if (!game_file(driverFile, path, sizeof path) || !exe_load(path, GAME_SOUND_DRIVER_SEG, &e)) return false;
@@ -259,10 +261,12 @@ static const ProgTimer *timer;  // the running program's
 // the sound driver's slot (0-6), called from the timer's handler as from the program: its answer (AX)
 void is_slot(int slot);
 void ts_slot(int slot);
+void as_slot(int slot);
 static void driver_slot(int slot)
 {
   if (soundDriver == 'I') is_slot(slot);
-  else ts_slot(slot);
+  else if (soundDriver == 'T') ts_slot(slot);
+  else as_slot(slot);
 }
 static uint16_t sound_call(int slot)
 {
@@ -363,6 +367,7 @@ static void audio_until(uint64_t t)
   static int16_t buf[4096];
   int n = pit_render(t, 44100, buf, (int)(sizeof buf / sizeof *buf));
   if (soundDriver == 'T') tandy_render(t, 44100, buf, n);
+  if (soundDriver == 'A') opl_render(t, 44100, buf, n);
   if (n && host->audio) host->audio(host->ctx, buf, n);
 }
 
@@ -497,11 +502,17 @@ static uint16_t port_in(u16 port)
     }
   }
   if (port == 0x201) return 0xFF;  // no joystick
+  if (port == 0x40 && !pit_ch0_mode2()) tNow += 1;  // (a read takes a tick: the drivers' speed tests time a loop by it)
   if (pit_in(port, tNow, &v)) return v;
+  if (port == 0x388 || port == 0x389)  // the AdLib's status (a read takes a microsecond: the driver's test times its
+  {                                    // timer by reading it)
+    tNow += 1;
+    if (opl_in(port, tNow, &v)) return v;
+  }
   return 0;
 }
 
-static bool port_out(u16 port, u8 v) { return pit_out(port, v, tNow) || tandy_out(port, v, tNow); }
+static bool port_out(u16 port, u8 v) { return pit_out(port, v, tNow) || tandy_out(port, v, tNow) || opl_out(port, v, tNow); }
 
 // the programs' calls of the sound driver: the loaded one's (the BIOS's keyboard buffer as it was after a song:
 // the key that ended it is still the host's)
@@ -905,6 +916,7 @@ int game_run(const GameHost *h)
   nextFrame = t0 + FRAME_US;
   pit_reset();
   tandy_reset();
+  opl_reset();
   tNow = lastIrq = 0;
   game_frames = 0;
   asm_port_hook = port_in;

@@ -1,5 +1,5 @@
-// soundtest SND.TXT GAMEDIR [I|T]: a sound driver (I: the IBM speaker's, ISOUND.SAM: isound.c; T: Tandy's, TSOUND.SAM:
-// tsound.c; recompiled whole) against a capture of
+// soundtest SND.TXT GAMEDIR [I|T|A]: a sound driver (I: the IBM speaker's, ISOUND.SAM: isound.c; T: Tandy's, TSOUND.SAM:
+// tsound.c; A: the AdLib's, ASOUND.SAM of 1-10-94: asound.c; recompiled whole) against a capture of
 // the real one (the workspace's oracle/cap_snd.sh + snd_ev.py): the driver's slot calls as the game made them,
 // the port reads as the game got them, and every port write compared. The PWM player's polls of the PIT's channel
 // 0 (04A8, the loop's timing, not captured) are answered by a counter that wraps every fourth read, and its latch
@@ -17,6 +17,7 @@
 
 void is_slot(int slot);
 void ts_slot(int slot);
+void as_slot(int slot);
 static char drv = 'I';
 
 typedef struct
@@ -91,6 +92,13 @@ static u16 port_in(u16 port)
   }
   // the joystick's buttons: none pressed (the game's driver, with no joystick, jumps over its read: 0478)
   if (port == 0x201) return 0xFF;
+  // the AdLib's status: its test's reads as captured, the ones that only delay a write the last value again
+  static u8 status;
+  if (port == 0x388 || port == 0x389)
+  {
+    if (pos < nev && ev[pos].kind == 'i' && ev[pos].a == port) status = (u8)ev[pos++].b;
+    return status;
+  }
   if (pos < nev && ev[pos].kind == 'i' && ev[pos].a == port) return (u16)ev[pos++].b;
   fail("reads", port, 0);
   return 0xFF;
@@ -114,6 +122,7 @@ static void call(int slot, u16 arg)
   PUSH(0x0000);
   depth++;
   if (drv == 'T') ts_slot(slot);
+  else if (drv == 'A') as_slot(slot);
   else is_slot(slot);
   depth--;
   R.sp += 2;
@@ -127,7 +136,7 @@ static void call(int slot, u16 arg)
 
 int main(int argc, char **argv)
 {
-  if (argc < 3) { fprintf(stderr, "usage: soundtest SND.TXT GAMEDIR [I|T]\n"); return 2; }
+  if (argc < 3) { fprintf(stderr, "usage: soundtest SND.TXT GAMEDIR [I|T|A]\n"); return 2; }
   if (argc > 3) drv = argv[3][0];
   FILE *f = fopen(argv[1], "r");
   if (!f) { fprintf(stderr, "cannot read %s\n", argv[1]); return 2; }
@@ -143,7 +152,7 @@ int main(int argc, char **argv)
   }
   fclose(f);
   char path[1024];
-  snprintf(path, sizeof path, "%s/%s", argv[2], drv == 'T' ? "TSOUND.SAM" : "ISOUND.SAM");
+  snprintf(path, sizeof path, "%s/%s", argv[2], drv == 'T' ? "TSOUND.SAM" : drv == 'A' ? "ASOUND.SAM" : "ISOUND.SAM");
   ExeInfo info;
   if (!exe_load(path, 0xD000, &info)) { fprintf(stderr, "cannot load %s\n", path); return 2; }
   // the shared block's segment at 0000:04F0 (the driver reads the joystick flag there, +34: none)

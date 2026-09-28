@@ -24,7 +24,7 @@ typedef struct
   bool noTitle;  // /NT: no title sequence
   void *ctx;
   char sound;    // the setup's sound driver (its name's letter, as the setup's /A<letter>): 'I' the IBM speaker, 'T'
-                 // Tandy's, else none
+                 // Tandy's, 'A' the AdLib, else none
   // the speaker's sound, as each frame ends: 44100 samples a second, mono (NULL: not wanted)
   void (*audio)(void *ctx, const int16_t *samples, int n);
 } GameHost;

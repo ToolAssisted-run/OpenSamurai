@@ -329,7 +329,8 @@ from the frontend's scan codes. frontend/main.c: SDL2, mode 13h through the DAC,
 emulation; a melee that turns into a duel runs the duel after it (the launcher's rule). RP's saved games are
 written to the game directory (Alt-S at the Home Option scroll). RP refuses to save on the original disk
 (168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. The IBM speaker's and Tandy's
-sounds are the frontend's `/AI` and `/AT` (5.8, 5.9). Not yet: the AdLib, the MT-32, the joystick.
+sounds are the frontend's `/AI` and `/AT` (5.8, 5.9), the AdLib's `/AA`, the default (5.10). Not yet: the MT-32, the
+joystick.
 
 Seed 14 (three sub-games in one tick) needed two things: the test replaying each sub-game's own results (the
 shared block at RP's next main entry; the test had been falling back to the next tick's), and FileOnDisk's putting
@@ -390,6 +391,25 @@ time goes on, so the loop's back jump (075A) calls asm_idle, where the frontend 
 waits for their tick are patched so by work/snd_rec.sh). source/tandy.c models the chip (its channels at 3/16 of a
 PIT tick). Verification: tests/soundtest.c on the title (4519 calls) and 8 captures of 20,000 frames of the
 role-playing game (about 21,500 calls each, 22 sounds and musics) identical.
+
+### 5.10 Sound: the AdLib (ASOUND.SAM of 1-10-94) — recompiled whole in source/asound.c, verified
+
+The game directory's AdLib driver is a later one (AdLibSamurai 1-10-94) than the floppy's (10-25-89); the later one
+is the reconstruction's. It drives an OPL2 at 388h/389h: at its start the chip's test (timer 1 set to FFh and
+started, the status read 200 times: C0h after, 00h before; else AX = 41h), the rhythm mode on (BDh = 20h); each
+write is delayed by status reads (30 before the register, 5 before the value). Its tick runs a sequencer of six
+voices on a stack of its own (its data segment's) and asks for the fast rate while a pitch sweep runs; the fast
+tick moves the sweeps. Its voices call routines through [bx+16h] (0310h, 075Bh: roots of the recompilation, with
+its 47 sounds' table at cs:07FB). Slot 4 waits for the tick for musics 0 and 5 (the back jump at 0923, as Tandy's).
+(The floppy's driver times a loop with the PIT at its start instead, and divides by the time: a PIT read here
+takes a tick.)
+
+source/opl.c is a model of the OPL2 from its documented workings (the log-sine and exponential tables, the
+envelope's rates, the key scaling, the tremolo and vibrato, feedback and connection, the rhythm mode's phases
+and noise, the timers), at the chip's 49716 samples a second. Verification: tests/soundtest.c on the title (4867
+calls) and 8 captures of the role-playing game (about 21,200 calls each) identical; the chip model's sound of the
+title's writes (tests/oplrender.c) against DOSBox-X's recording of the same frames (oracle-run's audio): the
+short-time log spectra's correlation 0.984 (median of 810 windows of 93 ms), the same pitches, the same loudness.
 
 ## 6. Methods
 
