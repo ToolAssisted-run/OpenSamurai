@@ -15,6 +15,7 @@ void ml_far_call(u16 seg, u16 off);
 void ml_near_call(u16 off);
 u16 ml_ticks(u16 site);
 u8 ml_kbd_poll(u16 site);
+void ml_step(void);
 void ml_crt0_body(void);
 void ml_main_body(void);
 

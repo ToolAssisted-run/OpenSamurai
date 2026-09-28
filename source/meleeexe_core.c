@@ -1900,6 +1900,7 @@ static u16 f_1000_07ba(void)
 static void a_1000_07c2(void)
 {
   FN(0x100007C2);
+  ml_step();
   R.cs = 0x27cc;
   PUSH(R.ax);                                                  // 07c2 push ax
   PUSH(R.cx);                                                  // 07c3 push cx

@@ -121,7 +121,17 @@ void ml_driver(int slot)
   R.sp += 4;
 }
 
-u16 ml_ticks(u16 site) { return host && host->ticks ? host->ticks(host->ctx, site) : *P16(0x53); }
+// the tick counter as the program reads it (the interrupt's): its memory too
+u16 ml_ticks(u16 site)
+{
+  if (host && host->ticks) *P16(0x53) = host->ticks(host->ctx, site);
+  return *P16(0x53);
+}
+
+void ml_step(void)
+{
+  if (host && host->step) host->step(host->ctx);
+}
 
 u8 ml_kbd_poll(u16 site)
 {

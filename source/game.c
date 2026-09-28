@@ -604,7 +604,7 @@ static int run_melee(void)
 {
   ExeInfo e;
   if (!program_load("MELEE.EXE", &e)) return -1;
-  static MeleeExeHost mh = { duel_answer, melee_ticks, NULL, duel_exit_, NULL, NULL };
+  static MeleeExeHost mh = { duel_answer, melee_ticks, NULL, NULL, duel_exit_, NULL, NULL };
   mh.gameDir = host->gameDir;
   g_dsSeg = 0;
   meleeexe_attach(far_ptr(MELEE_DS, 0), GAME_SHARED_SEG, &mh);

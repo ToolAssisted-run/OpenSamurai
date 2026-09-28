@@ -19,6 +19,8 @@ typedef struct
   // the keyboard joystick's bytes DS:398C-398F (the INT 9 handler's) as they are when read (9F4F the button, 9F8A
   // the direction)
   void (*keyboardPoll)(void *ctx, int site);
+  // an elapsed tick's timer decrement begins (1000:07C2): a checkpoint
+  void (*step)(void *ctx);
   void (*exit)(void *ctx, int code);  // exit() (1 back to RP, 0 quit, 99 a file error): may return
   const char *gameDir;
   void *ctx;
