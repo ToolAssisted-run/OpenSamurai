@@ -62,7 +62,11 @@ void duel_main(const uint16_t regs[9])
   R.ds = R.ss = DUEL_DS;
   R.cs = DUEL_CS;
   exitArmed = true;
-  if (!setjmp(exitJump)) du_main_body();
+  if (!setjmp(exitJump))
+  {
+    du_main_body();
+    du_exit((i16)R.ax);  // main returned: the start-up's exit(main's value)
+  }
   exitArmed = false;
 }
 

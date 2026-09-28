@@ -62,7 +62,11 @@ void meleeexe_main(const uint16_t regs[9])
   R.ds = R.ss = MELEE_DS;
   R.cs = MELEE_CS;
   exitArmed = true;
-  if (!setjmp(exitJump)) ml_main_body();
+  if (!setjmp(exitJump))
+  {
+    ml_main_body();
+    ml_exit((i16)R.ax);  // main returned: the start-up's exit(main's value)
+  }
   exitArmed = false;
 }
 

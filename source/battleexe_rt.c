@@ -62,7 +62,11 @@ void battle_main(const uint16_t regs[9])
   R.ds = R.ss = BATTLE_DS;
   R.cs = BATTLE_CS;
   exitArmed = true;
-  if (!setjmp(exitJump)) ba_main_body();
+  if (!setjmp(exitJump))
+  {
+    ba_main_body();
+    ba_exit((i16)R.ax);  // main returned: the start-up's exit(main's value)
+  }
   exitArmed = false;
 }
 

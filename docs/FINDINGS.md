@@ -309,7 +309,7 @@ duelexe_rt.c and battleexe_rt.c (the picture decoder and exit in C; the DOS emul
   DS:53 (the timer's callback 1FE7:043E counts it while DS:57 says so) on each pass; a speed calibration counts
   its own loop's passes for 15 ticks: the host answers every read with the game's value. Its keyboard joystick
   is DUEL's (DS:398C-3996). time() goes through intdos.
-- Verified: 9 duels (3,580 frame waits), 9 battles (1,300 steps) and a melee (3,538 ticks) from main to exit (or
+- Verified: 9 duels (3,580 frame waits), 9 battles (1,300 steps) and 9 melees (46,000 ticks) from main to exit (or
   the capture's end), the data segment and the shared block equal at every checkpoint, the interrupt handlers'
   bytes (the timers', the keyboard joysticks') set from the capture at the checkpoints.
 
