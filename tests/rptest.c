@@ -28,6 +28,10 @@ static uint32_t MEM_BASE = 0x40000, MEM_LEN = 0x60000;
 
 typedef struct { uint32_t frame; uint64_t n; uint8_t *ds, *sh, *mem; } Tick;
 typedef enum { E_TICK, E_TIME, E_KEY, E_WAIT, E_SEED, E_KB90 } Kind;
+// the shared blocks the sub-games left (RP's main entries after them), in order
+static uint8_t (*subShared)[SHARED_SIZE];
+static uint64_t *subSharedN;
+static int nSubShared, subSharedPos;
 typedef struct { uint64_t n; Kind kind; uint32_t value, count; uint8_t f[8], k[8], j[2]; char site; } Event;
 
 static uint32_t watchFn;  // WATCHFN=SEGOFF: the registers and the stack words at each entry of that function
@@ -130,7 +134,8 @@ static void host_subgame(void *ctx, int code)
   printf("  sub-game %d\n", code);
   subgames++;
   uint16_t flag = shared_w(0x2c);
-  memcpy(shared.b, nextShared, SHARED_SIZE);
+  // the sub-game's results: as the capture has them at RP's next main entry, else the next tick's shared block
+  memcpy(shared.b, subSharedPos < nSubShared ? subShared[subSharedPos++] : nextShared, SHARED_SIZE);
   shared_set_w(0x2c, flag);  // RP's own flag (it clears it when it resumes)
   // the sub-game ends: DOS puts back the terminate, Ctrl-C and critical-error vectors from its PSP (its
   // parent's: the launcher's, as RP's PSP has them)
@@ -217,7 +222,7 @@ int main(int argc, char **argv)
   fclose(f);
   FILE *fi = fopen(argv[2], "r");
   if (!fi) { fprintf(stderr, "cannot read %s\n", argv[2]); return 2; }
-  char line[512];
+  static char line[4096];
   uint16_t (*tickRegs)[9] = NULL;
   int ntsp = 0, cap = 0, capSp = 0;
   while (fgets(line, sizeof line, fi))
@@ -252,6 +257,14 @@ int main(int argc, char **argv)
       if (p) hexbytes(++p, e.j, 2);
     }
     else if (!strcmp(kind, "seed")) { e.kind = E_SEED; e.value = (uint32_t)strtoul(p, 0, 16); }
+    else if (!strcmp(kind, "subshared"))  // the shared block a sub-game left
+    {
+      subShared = realloc(subShared, sizeof *subShared * (size_t)(nSubShared + 1));
+      subSharedN = realloc(subSharedN, sizeof *subSharedN * (size_t)(nSubShared + 1));
+      subSharedN[nSubShared] = e.n;
+      hexbytes(p, subShared[nSubShared++], SHARED_SIZE);
+      continue;
+    }
     else if (!strcmp(kind, "main"))  // main's entry: SP BP SI DI ES AX BX CX DX
     {
       for (int k = 0; k < 9; k++) { mainRegs[k] = (uint16_t)strtoul(p, &q, 16); p = q; }
@@ -318,6 +331,7 @@ int main(int argc, char **argv)
     evPos = 0;
     timeLeft = 0;
     while (evPos < nev && ev[evPos].n < a->n) evPos++;
+    for (subSharedPos = 0; subSharedPos < nSubShared && subSharedN[subSharedPos] < a->n; subSharedPos++) {}
     uint16_t defaultRegs[9] = { 0x9736, 0x973C };
     const uint16_t *regs = g < ntsp ? tickRegs[g] : defaultRegs;
     errors = 0;

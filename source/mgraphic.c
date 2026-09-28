@@ -1169,7 +1169,7 @@ L_098e:   R.dx = (u16)(0x3c8);                                         // 098e m
   SETH(R.ax, XOR8((u8)(R.ax >> 8), (u8)(R.ax >> 8)));          // 09b8 xor ah, ah
 L_09ba:   R.dx = (u16)(0x3d4);                                         // 09ba mov dx, 0x3d4
   SETL(R.ax, 0xd);                                             // 09bd mov al, 0xd
-  ASM_PORT_OUT(R.dx, R.ax);                                    // 09bf out dx, ax
+  ASM_PORT_OUT16(R.dx, R.ax);                                  // 09bf out dx, ax
 L_09c0:   ip_ = POP(); cs_ = POP(); R.sp += 0; if (cs_ != 0x19bd) return; goto dispatch_; // 09c0 retf
 L_09c2:   SETL(R.ax, AND8((u8)R.ax, 0x7f));                            // 09c2 and al, 0x7f
   W8(DS, (u16)(0x442), (u8)R.ax);                              // 09c4 mov byte ptr [0x442], al

@@ -39,6 +39,7 @@ u16 (*asm_port_hook)(u16 port);
 u16 asm_port_in(u16 port)
 {
   static u8 status;
+  if (port == 0x3DA) vga_status_read();
   if (asm_port_hook) return asm_port_hook(port);
   if (port == 0x3DA) return status ^= 0x09;
   return 0;
@@ -46,6 +47,7 @@ u16 asm_port_in(u16 port)
 
 void asm_port_out(u16 port, u16 value)
 {
+  if (vga_port_out(port, (u8)value)) return;
   if (port == 0x3C8) { dacIndex = (u8)value; dacPart = 0; }
   else if (port == 0x3C9)
   {
@@ -67,7 +69,11 @@ void asm_int(u8 n)
   u8 ah = (u8)(R.ax >> 8), al = (u8)R.ax;
   if (n == 0x10)
   {
-    if (ah == 0x00) videoMode = al & 0x7F;
+    if (ah == 0x00) videoMode = al & 0x7F, vga_set_mode(al & 0x7F);
+    else if (ah == 0x10 && al == 0x00) vga_attribute(R.bx & 0xFF, (u8)(R.bx >> 8));
+    else if (ah == 0x10 && al == 0x01) vga_attribute(0x11, (u8)(R.bx >> 8));
+    else if (ah == 0x10 && al == 0x02)
+      for (int k = 0; k < 17; k++) vga_attribute(k < 16 ? (u8)k : 0x11, *far_ptr(R.es, (u16)(R.dx + k)));
     else if (ah == 0x0F) R.ax = (u16)(0x2800 | videoMode), R.bx &= 0x00FF;
     else if (ah == 0x10 && al == 0x12)  // a block of DAC registers from ES:DX
       for (u16 k = 0; k < R.cx; k++)

@@ -7,6 +7,7 @@
 #define OPENSAMURAI_ASM2C_H
 
 #include "dsimage.h"
+#include "vga.h"
 
 typedef struct
 {
@@ -20,10 +21,29 @@ extern Regs R;
 #define SEGV_ES R.es
 #define SEGV_SS R.ss
 #define SEGV_CS R.cs
-#define M8(s, a) (*(u8a *)far_ptr(SEGV_##s, (u16)(a)))
-#define M16(s, a) (*(u16a *)far_ptr(SEGV_##s, (u16)(a)))
-#define W8(s, a, v) (M8(s, a) = (u8)(v))
-#define W16(s, a, v) (M16(s, a) = (u16)(v))
+// memory; the VGA's planar memory (A000-AFFF in a planar mode) goes through its graphics controller (vga.c)
+extern VgaState vga;
+static inline bool asm_vga(u16 seg) { return vga.planar && seg >= 0xA000 && seg < 0xB000; }
+static inline u8 asm_rd8(u16 seg, u16 a) { return asm_vga(seg) ? vga_read(seg, a) : *(u8a *)far_ptr(seg, a); }
+static inline u16 asm_rd16(u16 seg, u16 a)
+{
+  if (asm_vga(seg)) return (u16)(vga_read(seg, a) | vga_read(seg, (u16)(a + 1)) << 8);
+  return *(u16a *)far_ptr(seg, a);
+}
+static inline void asm_wr8(u16 seg, u16 a, u8 v)
+{
+  if (asm_vga(seg)) vga_write(seg, a, v);
+  else *(u8a *)far_ptr(seg, a) = v;
+}
+static inline void asm_wr16(u16 seg, u16 a, u16 v)
+{
+  if (asm_vga(seg)) vga_write(seg, a, (u8)v), vga_write(seg, (u16)(a + 1), (u8)(v >> 8));
+  else *(u16a *)far_ptr(seg, a) = v;
+}
+#define M8(s, a) asm_rd8(SEGV_##s, (u16)(a))
+#define M16(s, a) asm_rd16(SEGV_##s, (u16)(a))
+#define W8(s, a, v) asm_wr8(SEGV_##s, (u16)(a), (u8)(v))
+#define W16(s, a, v) asm_wr16(SEGV_##s, (u16)(a), (u16)(v))
 #define SETL(r, v) ((r) = (u16)(((r) & 0xFF00) | (u8)(v)))
 #define SETH(r, v) ((r) = (u16)(((r) & 0x00FF) | ((u16)(u8)(v) << 8)))
 
@@ -32,7 +52,7 @@ extern Regs R;
   do { \
     u16 v_ = (u16)(v); \
     R.sp -= 2; \
-    M16(SS, R.sp) = v_; \
+    W16(SS, R.sp, v_); \
   } while (0)
 static inline u16 asm_pop(void)
 {
@@ -165,6 +185,7 @@ extern u16 (*asm_port_hook)(u16 port);
 void asm_far_call(u16 seg, u16 off);  // a call through a far function pointer (rp_core.c)
 #define ASM_PORT_IN(p) asm_port_in(p)
 #define ASM_PORT_OUT(p, v) asm_port_out(p, v)
+#define ASM_PORT_OUT16(p, v) (asm_port_out(p, (u8)(v)), asm_port_out((u16)((p) + 1), (u8)((v) >> 8)))
 #define ASM_INT(n) asm_int(n)
 #define ASM_UNKNOWN_CALL(s, o) asm_unknown_call(s, o)
 #define ASM_BAD_SWITCH() asm_bad_switch()
