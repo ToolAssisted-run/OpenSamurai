@@ -107,6 +107,7 @@ void ml_driver(int slot)
     return;
   }
   if (slot >= 100 && slot <= 106 && asm_sound_slot && asm_sound_slot(slot - 100)) return;  // the sound driver loaded
+  if (slot >= 95 && slot <= 97 && asm_misc_slot && asm_misc_slot(slot)) return;  // the joystick
   switch (slot)
   {
   case 90:

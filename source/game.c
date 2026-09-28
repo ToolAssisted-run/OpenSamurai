@@ -1,8 +1,8 @@
 // The game as its launcher runs it (game.h). SAMURAI.COM (the original launcher, OLD.COM in the provided game
 // directory) publishes a 1 KB shared block, loads MISC.EXE, runs SU.EXE (the setup), loads the graphics driver
 // with FONTS.SAM after it and the sound driver, allocates a picture buffer, runs START.EXE, and then RP.EXE and
-// the action games by the exit codes. Here the setup's choices are VGA, no joystick, and no sound or the IBM
-// speaker (the host's).
+// the action games by the exit codes. Here the setup's choices are VGA, the host's joystick if it has one, and the
+// host's sound driver.
 #include "game.h"
 
 #include <stdio.h>
@@ -27,6 +27,8 @@
 #include <time.h>
 
 static const GameHost *host;
+static bool haveJoystick;  // the host can have a joystick (MISC's joystick slots and the game port are then modelled)
+static uint8_t joystick_port_in(void);
 // the sound driver loaded at GAME_SOUND_DRIVER_SEG: 'I' the IBM speaker's (isound.c), 'T' Tandy's (tsound.c), 'A' the
 // AdLib's (asound.c), 'R' the MT-32's (rsound.c); 0 the no-sound driver (the runtimes' own)
 static char soundDriver;
@@ -149,7 +151,7 @@ bool game_setup(const GameHost *h)
   if (!game_file("MGRAPHIC.EXE", path, sizeof path) || !exe_load(path, GAME_GRAPHICS_SEG, &e)) return false;
   uint16_t fonts = (uint16_t)(GAME_GRAPHICS_SEG + e.imageParagraphs);
   if (!game_file("FONTS.SAM", path, sizeof path) || !raw_load(path, fonts, NULL)) return false;
-  // the shared block: the setup's choices (the drivers' names, VGA, no joystick), the launcher's segments
+  // the shared block: the setup's choices (the drivers' names, VGA), the launcher's segments
   memcpy(shared.b + 0x00, "MGRAPHIC.EXE", 13);
   memcpy(shared.b + 0x0D, driverFile ? driverFile : "NSOUND.SAM", 11);
   shared_set_w(0x1A, GAME_GRAPHICS_SEG);
@@ -157,6 +159,10 @@ bool game_setup(const GameHost *h)
   shared_set_w(0x1E, GAME_MISC_SEG);
   shared_set_w(0x20, GAME_BUFFER_SEG);
   shared_set_w(0x22, 4);  // VGA
+  int jx, jy;
+  haveJoystick = h->joystick != NULL;
+  shared_set_w(0x34, haveJoystick && h->joystick(h->ctx, &jx, &jy) >= 0);  // the joystick (the setup's question; its calibration is MISC's, redone by
+                                     // each program: START's and RP's centre it)
   shared.b[0x26] = h->noTitle;
   for (int k = 0; k < 6; k++) shared_set_w(0x3E + 2 * k, 0xFFFF);
   shared_set_w(0x38, 1);
@@ -509,7 +515,12 @@ static uint16_t port_in(u16 port)
       if (key_waiting()) w16(0x40, 0x1C, (uint16_t)(head + 2));
     }
   }
-  if (port == 0x201) return 0xFF;  // no joystick
+  if (port == 0x201)  // (a program that looks at the joystick lets the time go on, as at the keyboard)
+  {
+    if (!haveJoystick) return 0xFF;  // (no joystick)
+    poll(false);
+    return joystick_port_in();
+  }
   if (port == 0x40 && !pit_ch0_mode2()) tNow += 1;  // (a read takes a tick: the drivers' speed tests time a loop by it)
   if (pit_in(port, tNow, &v)) return v;
   if (port == 0x388 || port == 0x389)  // the AdLib's status (a read takes a microsecond: the driver's test times its
@@ -521,8 +532,39 @@ static uint16_t port_in(u16 port)
   return 0;
 }
 
+// the game port (201h): a write starts the joystick's one-shots, each axis's bit then reads 1 for as many reads as its
+// position says (MISC counts them: its centre and its extremes calibrate them); the buttons' bits read 0 pressed
+static int portCount[2];
+static void joystick_port_out(void)
+{
+  int x = 0, y = 0;
+  host->joystick(host->ctx, &x, &y);
+  portCount[0] = 20 + (int)((int64_t)(x + 32768) * 400 / 65536);
+  portCount[1] = 20 + (int)((int64_t)(y + 32768) * 400 / 65536);
+}
+static uint8_t joystick_port_in(void)
+{
+  int x, y, b = host->joystick(host->ctx, &x, &y);
+  if (b < 0) return 0xFF;  // (none plugged in: the one-shots never end, the buttons are up)
+  uint8_t v = (uint8_t)(0xFC & ~((b & 3) << 4));
+  for (int k = 0; k < 2; k++)
+    if (portCount[k] > 0) v |= (uint8_t)(1 << k), portCount[k]--;
+  return v;
+}
+void mi_slot(int slot);
+static bool misc_slot(int slot)
+{
+  mi_slot(slot);
+  return true;
+}
+
 static bool port_out(u16 port, u8 v)
 {
+  if (port == 0x201)
+  {
+    if (haveJoystick) joystick_port_out();
+    return true;
+  }
   return pit_out(port, v, tNow) || tandy_out(port, v, tNow) || opl_out(port, v, tNow) || mpu_out(port, v, tNow, game_midi);
 }
 
@@ -936,6 +978,7 @@ int game_run(const GameHost *h)
   asm_port_out_hook = port_out;
   asm_sound_slot = sound_slot;
   asm_idle_hook = frame;  // (a driver waiting for its tick: the next frame's interrupts)
+  asm_misc_slot = haveJoystick ? misc_slot : NULL;
   int code = run_start();
   // the launcher: RP and its exit codes (1-3 the action games, which RP runs itself while it hibernates: see
   // rp_rt.c; 4 a new game: START again; 0 the end)
@@ -948,5 +991,6 @@ int game_run(const GameHost *h)
   asm_port_out_hook = NULL;
   asm_sound_slot = NULL;
   asm_idle_hook = NULL;
+  asm_misc_slot = NULL;
   return code;
 }

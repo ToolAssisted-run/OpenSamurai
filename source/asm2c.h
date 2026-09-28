@@ -188,6 +188,9 @@ extern bool (*asm_port_out_hook)(u16 port, u8 value);
 // caller's far return address on the stack, which it returns to; false if there is none (the runtimes then do
 // the no-sound driver's)
 extern bool (*asm_sound_slot)(int slot);
+// the joystick's slots of MISC (95 a button, 96 the centre, 97 the position), when a frontend has a joystick: MISC's
+// own code (misc.c, recompiled) reading the game port; false if there is none (the runtimes answer no joystick)
+extern bool (*asm_misc_slot)(int slot);
 // a driver's loop that waits for the timer's interrupt to change something (the reconstruction's interrupts come
 // when the host's time goes on): the host lets it go on (the waits' back jumps call this)
 extern void (*asm_idle_hook)(void);

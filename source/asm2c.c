@@ -48,6 +48,7 @@ u16 asm_port_in(u16 port)
 
 bool (*asm_port_out_hook)(u16 port, u8 value);
 bool (*asm_sound_slot)(int slot);
+bool (*asm_misc_slot)(int slot);
 void (*asm_idle_hook)(void);
 void asm_idle(void)
 {

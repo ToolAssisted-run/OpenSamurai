@@ -16,15 +16,55 @@
 uint8_t *far_ptr(uint16_t seg, uint16_t off);
 
 static SDL_Window *window;
+// the joystick: the first one plugged in (/NJ: none), its first two axes (or its hat) and buttons; for scripted runs
+// OPENSAMURAI_JOY="FRAME:X,Y,BUTTONS ..." (from that frame on; X and Y -32768 to 32767, BUTTONS bit 0 and 1)
+static SDL_Joystick *joy;
+static bool useJoystick = true;
+static const char *scriptJoy;
+static long frameCount;
+static int joystick(void *ctx, int *x, int *y)
+{
+  (void)ctx;
+  if (scriptJoy)
+  {
+    int b = 0;
+    *x = *y = 0;
+    for (const char *p = scriptJoy; *p;)
+    {
+      char *q;
+      long f = strtol(p, &q, 10);
+      int sx, sy, sb;
+      if (q == p || *q != ':' || sscanf(q + 1, "%d,%d,%d", &sx, &sy, &sb) != 3 || f > frameCount) break;
+      *x = sx, *y = sy, b = sb;
+      p = strchr(q, ' ');
+      if (!p) break;
+      while (*p == ' ') p++;
+    }
+    return b;
+  }
+  if (!joy) return -1;
+  *x = SDL_JoystickGetAxis(joy, 0);
+  *y = SDL_JoystickNumAxes(joy) > 1 ? SDL_JoystickGetAxis(joy, 1) : 0;
+  if (SDL_JoystickNumHats(joy) > 0)
+  {
+    Uint8 h = SDL_JoystickGetHat(joy, 0);
+    if (h & SDL_HAT_LEFT) *x = -32768;
+    if (h & SDL_HAT_RIGHT) *x = 32767;
+    if (h & SDL_HAT_UP) *y = -32768;
+    if (h & SDL_HAT_DOWN) *y = 32767;
+  }
+  return (SDL_JoystickGetButton(joy, 0) ? 1 : 0) | (SDL_JoystickGetButton(joy, 1) ? 2 : 0);
+}
 static SDL_Renderer *renderer;
 static SDL_Texture *texture;
 static uint16_t keys[64];
 static int keyHead, keyTail;
 // for scripted runs: OPENSAMURAI_KEYS="FRAME:KEY ..." (KEY hexadecimal, the BIOS's), OPENSAMURAI_SHOTS="FRAME ..."
-// (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting;
+// (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting, the start on
+// 25 October 1989 at noon;
 // OPENSAMURAI_WAV=FILE: the sound written to a WAV file; OPENSAMURAI_MIDI=FILE: the MT-32's MIDI to a MIDI file;
 // OPENSAMURAI_MT32ROMS=DIR: the MT-32's ROMs (else the user's data folder's roms, the program's, the game's folder)
-static long frameCount, lastFrame = -1;
+static long lastFrame = -1;
 static const char *scriptKeys, *scriptShots, *scriptScans;
 // OPENSAMURAI_SCANS="FRAME:+SS FRAME:-SS ..." (SS the PC's scan code, hexadecimal; +e/-e for the grey keys): the
 // keyboard's make and break codes, for the programs that read the keyboard themselves
@@ -149,6 +189,8 @@ static void pump(void)
   while (SDL_PollEvent(&ev))
   {
     if (ev.type == SDL_QUIT) exit(0);
+    if (ev.type == SDL_JOYDEVICEADDED && !joy && useJoystick) joy = SDL_JoystickOpen(ev.jdevice.which);
+    if (ev.type == SDL_JOYDEVICEREMOVED && joy && ev.jdevice.which == SDL_JoystickInstanceID(joy)) SDL_JoystickClose(joy), joy = NULL;
     if ((ev.type == SDL_KEYDOWN && !ev.key.repeat) || ev.type == SDL_KEYUP)
     {
       bool ext;
@@ -484,7 +526,7 @@ int main(int argc, char **argv)
 {
   if (argc < 2)
   {
-    fprintf(stderr, "usage: opensamurai GAMEDIR [/NT] [/AA|/AI|/AT|/AN]\n  GAMEDIR: the game's files (the original floppy's)\n  /NT: no title; the sound: /AA the AdLib's (the default), /AI the IBM speaker's, /AT Tandy's, /AN none\n");
+    fprintf(stderr, "usage: opensamurai GAMEDIR [/NT] [/NJ] [/AA|/AR|/AI|/AT|/AN]\n  GAMEDIR: the game's files (the original floppy's)\n  /NT: no title; /NJ: no joystick; the sound: /AA the AdLib's (the default), /AR the MT-32's, /AI the IBM speaker's, /AT Tandy's, /AN none\n");
     return 2;
   }
   scriptKeys = getenv("OPENSAMURAI_KEYS");
@@ -494,13 +536,17 @@ int main(int argc, char **argv)
   fast = getenv("OPENSAMURAI_FAST") != NULL;
   time_t t = time(NULL);
   struct tm *tm = localtime(&t);
+  static struct tm fixed = { .tm_year = 89, .tm_mon = 9, .tm_mday = 25, .tm_hour = 12 };
+  if (getenv("OPENSAMURAI_FAST")) tm = &fixed;  // (a scripted run starts on the same day: it goes the same way)
   GameHost host = { present, now_us, sleep_until, key_waiting, read_key,
                     { tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, 0 },
-                    argv[1], false, NULL, 'A', audio, midi };
-  // the setup's arguments: /NT no title, /A<letter> the sound driver (A the AdLib, the default; I the IBM speaker,
+                    argv[1], false, NULL, 'A', audio, midi, joystick };
+  // the setup's arguments: /NT no title, /J the joystick (the default, when one is plugged in), /NJ none, /A<letter> the sound driver (A the AdLib, the default; I the IBM speaker,
   // T Tandy's, R the MT-32's, N none)
   for (int k = 2; k < argc; k++)
     if (!strcasecmp(argv[k], "/NT")) host.noTitle = true;
+    else if (!strcasecmp(argv[k], "/NJ")) useJoystick = false;
+    else if (!strcasecmp(argv[k], "/J")) useJoystick = true;
     else if ((argv[k][0] == '/' || argv[k][0] == '-') && (argv[k][1] == 'A' || argv[k][1] == 'a') && argv[k][2])
       host.sound = (char)toupper((unsigned char)argv[k][2]);
   if (!strchr("ITARN", host.sound))
@@ -514,11 +560,15 @@ int main(int argc, char **argv)
 #else
   if (host.sound == 'R') fprintf(stderr, "opensamurai: built without the MT-32 (Munt's libmt32emu): the AdLib's sound instead\n"), host.sound = 'A';
 #endif
-  if (SDL_Init(SDL_INIT_VIDEO | (host.sound != 'N' ? SDL_INIT_AUDIO : 0)))
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | (host.sound != 'N' ? SDL_INIT_AUDIO : 0)))
   {
     fprintf(stderr, "opensamurai: %s\n", SDL_GetError());
     return 1;
   }
+  scriptJoy = getenv("OPENSAMURAI_JOY");
+  if (useJoystick && !scriptJoy && SDL_NumJoysticks() > 0) joy = SDL_JoystickOpen(0);
+  if (!useJoystick) host.joystick = NULL;
+  if (joy) fprintf(stderr, "opensamurai: the joystick: %s\n", SDL_JoystickName(joy));
   if (host.sound != 'N' && !fast)
   {
     SDL_AudioSpec want = { 0 }, have;

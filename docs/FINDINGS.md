@@ -329,7 +329,7 @@ from the frontend's scan codes. frontend/main.c: SDL2, mode 13h through the DAC,
 emulation; a melee that turns into a duel runs the duel after it (the launcher's rule). RP's saved games are
 written to the game directory (Alt-S at the Home Option scroll). RP refuses to save on the original disk
 (168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. The IBM speaker's and Tandy's
-sounds are the frontend's `/AI` and `/AT` (5.8, 5.9), the AdLib's `/AA`, the default (5.10); the MT-32's `/AR` (5.11). Not yet: the joystick.
+sounds are the frontend's `/AI` and `/AT` (5.8, 5.9), the AdLib's `/AA`, the default (5.10); the MT-32's `/AR` (5.11). The joystick (5.12).
 
 Seed 14 (three sub-games in one tick) needed two things: the test replaying each sub-game's own results (the
 shared block at RP's next main entry; the test had been falling back to the next tick's), and FileOnDisk's putting
@@ -427,6 +427,23 @@ the program's roms folder or the game's), mixed with the rest in stereo; OPENSAM
 on the MT-32's display. Verification: tests/soundtest.c on 8 captures of the role-playing game (about 21,400 calls each), the
 driver's memory past its image as the real game's (MEM=, a dump of the oracle's memory before the driver starts):
 identical.
+
+### 5.12 The joystick (MISC.EXE) — recompiled whole in source/misc.c
+
+MISC's slots 95-97 are the joystick: 95 the button N (port 201h's bit 4 + N, low when pressed), 96 the centre, 97
+the position. An axis is read by timing: a write to 201h starts the one-shots, and a loop counts the reads while
+each axis's bit is 1 (the count grows with the stick's position; the loop gives up after 65535). The centre is the
+count when 96 is called; 97 reports each axis as a signed byte, -127 to 127, against the most extreme count seen
+on that side since the centre (a count past it is a new extreme, reported as -127 or 127). The setup asks "Do you
+have a joystick" (shared+34 = 1), then "Center joystick, then press fire button 1" and the corners, which only fill
+MISC's extremes: START and RP call 96 again at their start, so the calibration is theirs. READ.ME: Alt-J turns the
+joystick on and off in the game.
+
+The frontend: a joystick plugged in makes the setup's answer yes (/NJ: no); MISC's recompiled code answers slots
+95-97 (the tests keep the captured answers), and the game port is modelled: after a write, each axis's bit reads 1
+for 20 + the position x 400 / 65536 reads, the buttons' bits 0 while pressed, all 1s with no joystick plugged in;
+a read of the port lets the time go on, as a look at the keyboard does. Not verified against the real game (the
+oracle's DOSBox-X has no joystick to move); the same code and data as the real MISC.
 
 ## 6. Methods
 

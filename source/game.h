@@ -29,6 +29,9 @@ typedef struct
   void (*audio)(void *ctx, const int16_t *samples, int n);
   // the MT-32's MIDI (sound 'R'), a byte at a time, with its time in the audio's samples (NULL: not wanted)
   void (*midi)(void *ctx, uint8_t byte, uint64_t sample);
+  // the joystick: its position (x, y: -32768 left/up to 32767 right/down) and its buttons (bit 0 the first, bit 1 the
+  // second); -1 if there is none (NULL: none). With one, the setup's choice is the joystick (shared+34)
+  int (*joystick)(void *ctx, int *x, int *y);
 } GameHost;
 
 // The video frames (70.086 a second, the VGA's): their count so far
