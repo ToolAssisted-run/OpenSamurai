@@ -42,6 +42,12 @@ void rp_arena_from_memory(uint16_t from, uint16_t to);
 // pushes them before it sets them: their values stay in the stack); SP is DS:9736 once the game runs
 void rp_tick(const uint16_t regs[9]);
 
+// RP from main (1000:0000) as the C library's start-up calls it (regs as rp_tick's: its far return address and
+// main's arguments on the stack), until exit()
+void rp_main(const uint16_t regs[9]);
+// Called at every pass of the main loop's top (106a:0048), if set
+extern void (*rp_tickHook)(void);
+
 // Called with the original address (seg << 16 | off, Ghidra's segments) of every function as it is entered
 extern void (*rp_trace)(uint32_t addr);
 

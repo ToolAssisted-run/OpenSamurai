@@ -1477,7 +1477,7 @@ L_000b:   R.ax = (u16)(0x6);                                           // 000b m
   goto L_0042;                                                 // 003a jmp 0x42
 L_003c:   W16(DS, (u16)(0x812e), 0x4);                                 // 003c mov word ptr [0x812e], 4
 L_0042:   W16(DS, (u16)(0x3a48), 0x0);                                 // 0042 mov word ptr [0x3a48], 0
-L_0048:   if (rp_tickArmed == 2) { rp_tickArmed = 0; return; } if (rp_tickArmed == 1) rp_tickArmed = 2; W16(DS, (u16)(0x7b9a), INC16(M16(DS, (u16)(0x7b9a)))); // 0048 inc word ptr [0x7b9a]
+L_0048:   if (rp_tickHook) rp_tickHook(); if (rp_tickArmed == 2) { rp_tickArmed = 0; return; } if (rp_tickArmed == 1) rp_tickArmed = 2; W16(DS, (u16)(0x7b9a), INC16(M16(DS, (u16)(0x7b9a)))); // 0048 inc word ptr [0x7b9a]
   SETL(R.ax, M8(DS, (u16)(0x7b9a)));                           // 004c mov al, byte ptr [0x7b9a]
   AND8((u8)R.ax, 0x1);                                         // 004f test al, 1
   if (!R.zf) goto L_005a;                                      // 0051 jne 0x5a
@@ -40978,6 +40978,8 @@ void asm_far_call(u16 seg, u16 off)
 
 
 
+
+
 // one tick of the main loop (106a:0000 from its top at 106a:0048 to its next pass there), recompiled: entered with
 // the registers the loop has there -- its frame below the stack pointer sp (BP = sp + 6; it keeps nothing in SI/DI)
 void rp_tick(const uint16_t regs[9])
@@ -40994,6 +40996,24 @@ void rp_tick(const uint16_t regs[9])
   R.ds = R.ss = g_dsSeg;
   rp_tickEntry = 1;
   a_106a_0000();
+}
+
+// RP from main (1000:0000) as the C library's start-up calls it: its far return address and main's arguments on
+// the stack (regs: SP BP SI DI ES AX BX CX DX), until exit()
+void rp_main(const uint16_t regs[9])
+{
+  R.sp = g_sp = regs[0];
+  R.bp = regs[1];
+  R.si = regs[2];
+  R.di = regs[3];
+  R.es = regs[4];
+  R.ax = regs[5];
+  R.bx = regs[6];
+  R.cx = regs[7];
+  R.dx = regs[8];
+  R.ds = R.ss = g_dsSeg;
+  rp_tickEntry = 0;
+  a_1000_0000();
 }
 
 

@@ -6,6 +6,7 @@
 //   step: every tick from the capture's own state, compared with the next (the default)
 //   run:  from the first tick only
 //   trace T: up to tick T, printing the functions tick T enters (for comparing with an instruction trace)
+//   main MAIN.snap: from main's entry to the first tick (RP's start-up: its buffers, catalogs, the new game)
 #include "asm2c.h"
 #include "rp.h"
 #include "shared.h"
@@ -163,12 +164,17 @@ static void print_fn(uint32_t addr)
 // where the reconstruction's frames are not where the original's were)
 // and the picture decoder's work area (DS:419A-5BB2: its string table, re-initialised by every decode, and its
 // private stack, which in the original also holds the frames of the catalog routines it calls for its input)
+static uint16_t mainRegs[9];
+static int haveMainRegs;
+static jmp_buf tickJump;
+static void stop_at_tick(void) { longjmp(tickJump, 1); }
+
 static int volatile_byte(int k) { return (k >= 0x3038 && k < 0x3060) || (k >= 0x3398 && k < 0x33A0) || (k >= 0x419A && k < 0x5BB3) || k >= 0x8F60; }
 
 int main(int argc, char **argv)
 {
   setvbuf(stdout, NULL, _IOLBF, 0);
-  if (argc < 4) { fprintf(stderr, "usage: rptest TICKS.snap INPUTS.txt GAMEDIR [step|run|trace T]\n"); return 2; }
+  if (argc < 4) { fprintf(stderr, "usage: rptest TICKS.snap INPUTS.txt GAMEDIR [step|run|trace T|main MAIN.snap]\n"); return 2; }
   FILE *f = fopen(argv[1], "rb");
   char magic[4];
   uint32_t len;
@@ -226,6 +232,12 @@ int main(int argc, char **argv)
       if (p) hexbytes(++p, e.j, 2);
     }
     else if (!strcmp(kind, "seed")) { e.kind = E_SEED; e.value = (uint32_t)strtoul(p, 0, 16); }
+    else if (!strcmp(kind, "main"))  // main's entry: SP BP SI DI ES AX BX CX DX
+    {
+      for (int k = 0; k < 9; k++) { mainRegs[k] = (uint16_t)strtoul(p, &q, 16); p = q; }
+      haveMainRegs = 1;
+      continue;
+    }
     else continue;
     if (nev == cap) ev = realloc(ev, sizeof *ev * (size_t)(cap = cap * 2 + 1024));
     ev[nev++] = e;
@@ -239,6 +251,36 @@ int main(int argc, char **argv)
   RpHost host = { host_time, host_key_waiting, host_read_key, host_frame_poll, host_seeded, NULL, host_exit, host_subgame, argv[3], NULL };
   rp_attach(ds, DS_SEG, SHARED_SEG, &host);
   rp_set_arena(0x9000, 0x9FFF);
+  if (argc > 5 && !strcmp(argv[4], "main"))
+  {
+    // main: from main's entry (MAIN.snap) to the main loop's first tick, compared with the capture's first tick
+    FILE *fm = fopen(argv[5], "rb");
+    static uint8_t mem[0xA0000];
+    if (!fm || fread(ds, 1, DS_LEN, fm) != DS_LEN || fread(shared.b, 1, SHARED_SIZE, fm) != SHARED_SIZE || fread(mem, 1, sizeof mem, fm) != sizeof mem || !haveMainRegs || nt < 1) { fprintf(stderr, "cannot read %s (or no main in the inputs)\n", argv[5]); return 2; }
+    fclose(fm);
+    memcpy(far_ptr(0, 0), mem, sizeof mem);
+    rp_arena_from_memory(0x2700, 0xA000);
+    evPos = 0;
+    timeLeft = 0;
+    errors = 0;
+    exitCode = -1;
+    nextShared = t[0].sh;
+    rp_trace = count_fn;
+    rp_tickHook = stop_at_tick;
+    int r = setjmp(tickJump);
+    if (!r && !setjmp(exitJump)) rp_main(mainRegs);
+    rp_tickHook = NULL;
+    rp_trace = NULL;
+    if (!r) printf("  the C did not reach the main loop\n");
+    if (evPos < nev && peek() && peek()->n < t[0].n && errors++ < 5) printf("  the game had more before the first tick: %s at n=%llu\n", kind_name(peek()->kind), (unsigned long long)peek()->n);
+    int diff = 0, s2 = 0;
+    for (int k = 0; k < DS_LEN; k++)
+      if (ds[k] != t[0].ds[k] && !volatile_byte(k)) { if (s2++ < 12) printf(" %04X:%02X/%02X", k, ds[k], t[0].ds[k]); diff++; }
+    for (int k = 0; k < SHARED_SIZE; k++)
+      if (shared.b[k] != t[0].sh[k]) { if (s2++ < 12) printf(" shared+%03X:%02X/%02X", k, shared.b[k], t[0].sh[k]); diff++; }
+    printf("\n%s: main to the first tick: %d bytes differ, %d input differences (main)\n", argv[1], diff, errors);
+    return diff || errors;
+  }
   int bad = 0, shown = 0, show = getenv("SHOW") ? atoi(getenv("SHOW")) : 12;
   for (int g = 0; g + 1 < nt; g++)
   {

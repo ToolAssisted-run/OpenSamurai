@@ -16,9 +16,8 @@ static SDL_Renderer *renderer;
 static SDL_Texture *texture;
 static uint16_t keys[64];
 static int keyHead, keyTail;
-static uint64_t nextFrame, perFrame;
 // for scripted runs: OPENSAMURAI_KEYS="FRAME:KEY ..." (KEY hexadecimal, the BIOS's), OPENSAMURAI_SHOTS="FRAME ..."
-// (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1 does not wait for the frames' time
+// (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting
 static long frameCount, lastFrame = -1;
 static const char *scriptKeys, *scriptShots;
 static bool fast;
@@ -72,12 +71,68 @@ static uint16_t bios_key(const SDL_Keysym *k)
   return 0;
 }
 
+// the PC keyboard's scan code (set 1) for an SDL key; *extended for the grey keys (E0-prefixed)
+static uint8_t pc_scan(SDL_Scancode c, bool *extended)
+{
+  *extended = false;
+  if (c >= SDL_SCANCODE_A && c <= SDL_SCANCODE_Z)
+  {
+    static const uint8_t s[26] = { 0x1E, 0x30, 0x2E, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24, 0x25, 0x26, 0x32,
+                                   0x31, 0x18, 0x19, 0x10, 0x13, 0x1F, 0x14, 0x16, 0x2F, 0x11, 0x2D, 0x15, 0x2C };
+    return s[c - SDL_SCANCODE_A];
+  }
+  if (c >= SDL_SCANCODE_1 && c <= SDL_SCANCODE_0) return (uint8_t)(2 + c - SDL_SCANCODE_1);
+  if (c >= SDL_SCANCODE_F1 && c <= SDL_SCANCODE_F10) return (uint8_t)(0x3B + c - SDL_SCANCODE_F1);
+  switch (c)
+  {
+  case SDL_SCANCODE_ESCAPE: return 0x01;
+  case SDL_SCANCODE_MINUS: return 0x0C;
+  case SDL_SCANCODE_EQUALS: return 0x0D;
+  case SDL_SCANCODE_BACKSPACE: return 0x0E;
+  case SDL_SCANCODE_TAB: return 0x0F;
+  case SDL_SCANCODE_RETURN: return 0x1C;
+  case SDL_SCANCODE_KP_ENTER: *extended = true; return 0x1C;
+  case SDL_SCANCODE_LCTRL: return 0x1D;
+  case SDL_SCANCODE_LSHIFT: return 0x2A;
+  case SDL_SCANCODE_RSHIFT: return 0x36;
+  case SDL_SCANCODE_LALT: return 0x38;
+  case SDL_SCANCODE_SPACE: return 0x39;
+  case SDL_SCANCODE_KP_MULTIPLY: return 0x37;
+  case SDL_SCANCODE_KP_7: return 0x47;
+  case SDL_SCANCODE_KP_8: return 0x48;
+  case SDL_SCANCODE_KP_9: return 0x49;
+  case SDL_SCANCODE_KP_MINUS: return 0x4A;
+  case SDL_SCANCODE_KP_4: return 0x4B;
+  case SDL_SCANCODE_KP_5: return 0x4C;
+  case SDL_SCANCODE_KP_6: return 0x4D;
+  case SDL_SCANCODE_KP_PLUS: return 0x4E;
+  case SDL_SCANCODE_KP_1: return 0x4F;
+  case SDL_SCANCODE_KP_2: return 0x50;
+  case SDL_SCANCODE_KP_3: return 0x51;
+  case SDL_SCANCODE_HOME: *extended = true; return 0x47;
+  case SDL_SCANCODE_UP: *extended = true; return 0x48;
+  case SDL_SCANCODE_PAGEUP: *extended = true; return 0x49;
+  case SDL_SCANCODE_LEFT: *extended = true; return 0x4B;
+  case SDL_SCANCODE_RIGHT: *extended = true; return 0x4D;
+  case SDL_SCANCODE_END: *extended = true; return 0x4F;
+  case SDL_SCANCODE_DOWN: *extended = true; return 0x50;
+  case SDL_SCANCODE_PAGEDOWN: *extended = true; return 0x51;
+  default: return 0;
+  }
+}
+
 static void pump(void)
 {
   SDL_Event ev;
   while (SDL_PollEvent(&ev))
   {
     if (ev.type == SDL_QUIT) exit(0);
+    if ((ev.type == SDL_KEYDOWN && !ev.key.repeat) || ev.type == SDL_KEYUP)
+    {
+      bool ext;
+      uint8_t sc = pc_scan(ev.key.keysym.scancode, &ext);
+      if (sc) game_key(sc, ext, ev.type == SDL_KEYDOWN);
+    }
     if (ev.type == SDL_KEYDOWN)
     {
       uint16_t k = bios_key(&ev.key.keysym);
@@ -123,7 +178,7 @@ static bool listed(const char *list, long n, unsigned *value)
   return false;
 }
 
-static void frame(void *ctx)
+static void present(void *ctx)
 {
   (void)ctx;
   frameCount++;
@@ -152,12 +207,27 @@ static void frame(void *ctx)
   SDL_RenderCopy(renderer, texture, NULL, NULL);
   SDL_RenderPresent(renderer);
   pump();
-  // 70.086 frames a second (the VGA's): late frames are not made up for
-  uint64_t now = SDL_GetPerformanceCounter();
-  if (fast) return;
-  if (nextFrame > now) SDL_Delay((uint32_t)((nextFrame - now) * 1000 / SDL_GetPerformanceFrequency()));
-  else nextFrame = now;
-  nextFrame += perFrame;
+}
+
+// the clock: real time, or (fast) a virtual one that runs a little at each look and jumps at the waits
+static uint64_t virtualNow;
+static uint64_t now_us(void *ctx)
+{
+  (void)ctx;
+  if (fast) return virtualNow += 20;
+  return SDL_GetPerformanceCounter() * 1000000 / SDL_GetPerformanceFrequency();
+}
+
+static void sleep_until(void *ctx, uint64_t t)
+{
+  if (fast)
+  {
+    if (t > virtualNow) virtualNow = t;
+    return;
+  }
+  uint64_t n = now_us(ctx);
+  if (t > n + 1000) SDL_Delay((uint32_t)((t - n) / 1000));
+  pump();
 }
 
 static int key_waiting(void *ctx)
@@ -176,22 +246,6 @@ static uint16_t read_key(void *ctx)
   return k;
 }
 
-static void clock_(void *ctx, GameClock *c)
-{
-  (void)ctx;
-  time_t t = time(NULL);
-  struct tm *tm = localtime(&t);
-  *c = (GameClock){ tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)(SDL_GetTicks() / 10 % 100) };
-}
-
-static uint32_t bios_ticks(void *ctx)
-{
-  (void)ctx;
-  time_t t = time(NULL);
-  struct tm *tm = localtime(&t);
-  return (uint32_t)((tm->tm_hour * 3600 + tm->tm_min * 60 + tm->tm_sec) * 18.2065);
-}
-
 int main(int argc, char **argv)
 {
   if (argc < 2)
@@ -203,7 +257,11 @@ int main(int argc, char **argv)
   scriptShots = getenv("OPENSAMURAI_SHOTS");
   if (getenv("OPENSAMURAI_FRAMES")) lastFrame = atol(getenv("OPENSAMURAI_FRAMES"));
   fast = getenv("OPENSAMURAI_FAST") != NULL;
-  GameHost host = { frame, key_waiting, read_key, clock_, bios_ticks, argv[1], argc > 2 && !strcasecmp(argv[2], "/NT"), NULL };
+  time_t t = time(NULL);
+  struct tm *tm = localtime(&t);
+  GameHost host = { present, now_us, sleep_until, key_waiting, read_key,
+                    { tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, 0 },
+                    argv[1], argc > 2 && !strcasecmp(argv[2], "/NT"), NULL };
   if (SDL_Init(SDL_INIT_VIDEO))
   {
     fprintf(stderr, "opensamurai: %s\n", SDL_GetError());
@@ -214,8 +272,6 @@ int main(int argc, char **argv)
   if (!renderer) renderer = SDL_CreateRenderer(window, -1, 0);
   SDL_RenderSetLogicalSize(renderer, 320, 240);  // the VGA's 320x200 on a 4:3 screen
   texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 200);
-  perFrame = SDL_GetPerformanceFrequency() * 1000 / 70086;
-  nextFrame = SDL_GetPerformanceCounter();
   int code = game_run(&host);
   if (code < 0) fprintf(stderr, "opensamurai: the game's files are not all in %s (MISC.EXE, NSOUND.SAM, MGRAPHIC.EXE, FONTS.SAM, START.EXE, ...)\n", argv[1]);
   SDL_Quit();

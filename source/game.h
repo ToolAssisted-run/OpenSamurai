@@ -14,17 +14,19 @@ typedef struct
 
 typedef struct
 {
-  // a video frame ends (70 Hz): show the screen (VRAM at A000, the palette asm_dac) and wait for its time; the
-  // keyboard's events are taken here
-  void (*frame)(void *ctx);
+  void (*present)(void *ctx);                  // a video frame is complete: show VRAM (A000) through the DAC (asm_dac)
+  uint64_t (*now)(void *ctx);                  // the time: microseconds, from any origin
+  void (*sleepUntil)(void *ctx, uint64_t t);   // wait until then (the frontend takes the keyboard's events meanwhile)
   int (*keyWaiting)(void *ctx);
   uint16_t (*readKey)(void *ctx);  // the next key (the BIOS's: scan code << 8 | ASCII), called when one is waiting
-  void (*clock)(void *ctx, GameClock *c);  // the local date and time
-  uint32_t (*biosTicks)(void *ctx);         // 18.2 Hz ticks since midnight
+  GameClock start;                 // the date and time when the game starts: the clock runs on with now()
   const char *gameDir;
   bool noTitle;  // /NT: no title sequence
   void *ctx;
 } GameHost;
+
+// The video frames (70.086 a second, the VGA's): their count so far
+extern uint64_t game_frames;
 
 // The segments the launcher gives the pieces in the real game (VGA, no sound): the layout is the original's, so
 // that every pointer the programs keep is the same
@@ -42,6 +44,10 @@ enum
 // The launcher's work before the first program: the drivers and fonts loaded, the shared block as the launcher and
 // the setup leave it. False if a file is missing
 bool game_setup(const GameHost *host);
+
+// A key pressed or released (the PC's scan code, set 1; extended: the grey keys, E0-prefixed), for the programs
+// that read the keyboard's port themselves (their INT 9 handlers). The BIOS's keys go through keyWaiting/readKey.
+void game_key(uint8_t scan, bool extended, bool pressed);
 
 // Runs the game from the start-up program on; returns when the player quits
 int game_run(const GameHost *host);

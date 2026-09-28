@@ -54,7 +54,7 @@ void asm_port_out(u16 port, u16 value)
 }
 
 // the BIOS and DOS services the drivers use: INT 10h (mode 13h, the DAC) and INT 21h (memory: the DOS arena of
-// the program, asm2c_dos_*)
+// the program, asm2c_dos_*; the interrupt vectors)
 u16 asm2c_dos_alloc(u16 paragraphs, u16 *largest);
 bool asm2c_dos_free(u16 seg);
 bool asm2c_dos_resize(u16 seg, u16 paragraphs, u16 *largest);
@@ -86,6 +86,18 @@ void asm_int(u8 n)
       return;
     }
     if (ah == 0x49) { R.cf = !asm2c_dos_free(R.es); if (R.cf) R.ax = 9; return; }
+    if (ah == 0x25)  // set an interrupt vector (the handlers are the host's: the divide error's are emulated)
+    {
+      *(u16a *)far_ptr(0, (u16)(al * 4)) = R.dx;
+      *(u16a *)far_ptr(0, (u16)(al * 4 + 2)) = R.ds;
+      return;
+    }
+    if (ah == 0x35)  // get one
+    {
+      R.bx = *(u16a *)far_ptr(0, (u16)(al * 4));
+      R.es = *(u16a *)far_ptr(0, (u16)(al * 4 + 2));
+      return;
+    }
     if (ah == 0x4A)
     {
       R.cf = !asm2c_dos_resize(R.es, R.bx, &largest);

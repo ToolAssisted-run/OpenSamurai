@@ -49,6 +49,7 @@
 static const RpHost *host;
 #define RP_PSP 0x27BC  // RP's program segment prefix in the oracle (its code at 27CC): the owner of its blocks
 u8 rp_tickEntry, rp_tickArmed;
+void (*rp_tickHook)(void);
 jmp_buf rp_resume;
 u8 rp_resumeArmed;
 void (*rp_trace)(uint32_t addr);

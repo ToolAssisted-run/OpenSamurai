@@ -6,6 +6,7 @@
 #include "game.h"
 #include "shared.h"
 #include "start.h"
+#include "rp.h"
 
 #include <setjmp.h>
 #include <stdio.h>
@@ -36,22 +37,43 @@ static void on_fn(uint32_t addr)
   printf("main: %d bytes differ from the capture's (SP %04X)\n", differ, R.sp);
 }
 
-static void frame(void *ctx)
+// KEYS="FRAME:KEY ..." (the BIOS's keys, hexadecimal): each becomes waiting at its frame
+static const char *script;
+static uint16_t pending[16];
+static int npending;
+static void present(void *ctx)
 {
   (void)ctx;
   if (++frames >= maxFrames) longjmp(stop, 1);
+  for (const char *p = script; p && *p;)
+  {
+    char *q;
+    long f = strtol(p, &q, 10);
+    if (q == p || *q != ':') break;
+    unsigned k = (unsigned)strtoul(q + 1, &q, 16);
+    if (f == frames && npending < 16) pending[npending++] = (uint16_t)k;
+    p = q;
+    while (*p == ' ') p++;
+  }
 }
-static int key_waiting(void *ctx) { (void)ctx; return 0; }
-static uint16_t read_key(void *ctx) { (void)ctx; return 0; }
-// the clock runs a hundredth of a second a reading (the programs' waits for it read it in a loop)
-static long hundredths;
-static void clock_(void *ctx, GameClock *c)
+// a virtual clock: 20 microseconds a look, the waits jump
+static uint64_t vnow;
+static uint64_t now_us(void *ctx) { (void)ctx; return vnow += 20; }
+static void sleep_until(void *ctx, uint64_t t) { (void)ctx; if (t > vnow) vnow = t; }
+static int key_waiting(void *ctx) { (void)ctx; return npending > 0; }
+static uint16_t read_key(void *ctx)
 {
   (void)ctx;
-  long t = hundredths++;
-  *c = (GameClock){ 1989, 10, 25, 12, (int)(t / 6000 % 60), (int)(t / 100 % 60), (int)(t % 100) };
+  uint16_t k = pending[0];
+  if (npending) memmove(pending, pending + 1, sizeof *pending * (size_t)--npending);
+  return k;
 }
-static uint32_t ticks(void *ctx) { (void)ctx; return 0x0CBF9D; }
+static long nrp;
+static void rp_fn(uint32_t addr)
+{
+  if (getenv("TRACERP") && nrp < atol(getenv("TRACERP"))) printf("R %04X:%04X frame %d ret %04X:%04X\n", addr >> 16, addr & 0xFFFF, frames, *(uint16_t *)far_ptr(R.ss, (uint16_t)(R.sp + 2)), *(uint16_t *)far_ptr(R.ss, R.sp));
+  nrp++;
+}
 
 int main(int argc, char **argv)
 {
@@ -65,8 +87,10 @@ int main(int argc, char **argv)
     haveMain = 1;
   }
   if (argc > 3) maxFrames = atoi(argv[3]);
-  GameHost h = { frame, key_waiting, read_key, clock_, ticks, argv[1], false, NULL };
+  GameHost h = { present, now_us, sleep_until, key_waiting, read_key, { 1989, 10, 25, 12, 0, 0, 0 }, argv[1], false, NULL };
   start_trace = on_fn;
+  rp_trace = rp_fn;
+  script = getenv("KEYS");
   int code = -2;
   if (!setjmp(stop)) code = game_run(&h);
   printf("%d frames, exit code %d\n", frames, code);

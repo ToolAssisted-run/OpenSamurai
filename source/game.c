@@ -12,6 +12,10 @@
 #include "exe.h"
 #include "shared.h"
 #include "start.h"
+#include "rp.h"
+
+#include <setjmp.h>
+#include <time.h>
 
 static const GameHost *host;
 
@@ -138,20 +142,62 @@ static void prog_exit(void *ctx, int code)
   exitCode = code;
 }
 
+// ---------------------------------------------------------------- time
+
+// Frames pass with the host's clock (70.086 a second, the VGA's), whenever the program looks at the time (a key
+// poll, the clock, the VGA's status, a frame wait); a frame wait waits for the next. At each frame the running
+// program's timer handler (INT 8, once it has hooked it) counts it.
+#define FRAME_US 14268
+uint64_t game_frames;
+static uint64_t t0, nextFrame;
+static void (*timerFrame)(void);  // the running program's frame routine
+
+static void poll(bool wait)
+{
+  uint64_t t = host->now(host->ctx);
+  if (wait && t < nextFrame)
+  {
+    host->sleepUntil(host->ctx, nextFrame);
+    t = nextFrame;
+  }
+  while (t >= nextFrame)
+  {
+    if (timerFrame) timerFrame();
+    game_frames++;
+    host->present(host->ctx);
+    nextFrame += FRAME_US;
+  }
+}
+
+static void frame(void) { poll(true); }
+
+// the date and the time: the host's at the start, and on with its clock
+static void clock_now(GameClock *c, uint32_t *biosTicks)
+{
+  uint64_t us = host->now(host->ctx) - t0;
+  uint64_t s0 = (uint64_t)host->start.hour * 3600 + host->start.minute * 60 + host->start.second;
+  uint64_t cs = s0 * 100 + host->start.hundredths + us / 10000;
+  uint64_t days = cs / 8640000;
+  cs %= 8640000;
+  *c = host->start;
+  c->day += (int)days;  // (the month's end is not kept: a game does not last that long)
+  c->hour = (int)(cs / 360000);
+  c->minute = (int)(cs / 6000 % 60);
+  c->second = (int)(cs / 100 % 60);
+  c->hundredths = (int)(cs % 100);
+  if (biosTicks) *biosTicks = (uint32_t)(cs * 182065 / 1000000);
+}
+
 static uint32_t start_dos(void *ctx, int ah)
 {
   (void)ctx;
-  GameClock c = { 1989, 1, 1, 12, 0, 0, 0 };
-  if (host->clock) host->clock(host->ctx, &c);
+  poll(false);
+  GameClock c;
+  clock_now(&c, NULL);
   if (ah == 0x2A) return (uint32_t)c.year << 16 | (uint32_t)c.month << 8 | (uint32_t)c.day;
   if (ah == 0x2C) return (uint32_t)(c.hour << 8 | c.minute) << 16 | (uint32_t)(c.second << 8 | c.hundredths);
   if (ah == 0x0B) return host->keyWaiting && host->keyWaiting(host->ctx) ? 0xFF : 0;
   return 0;
-}
-
-static void frame(void)
-{
-  if (host->frame) host->frame(host->ctx);
 }
 
 static uint16_t start_input(void *ctx, int slot)
@@ -160,6 +206,7 @@ static uint16_t start_input(void *ctx, int slot)
   switch (slot)
   {
   case 90:  // a key waiting
+    poll(false);
     return host->keyWaiting && host->keyWaiting(host->ctx) ? 0 : 0xFFFF;
   case 91:  // the next key: the program waits for it
     while (!(host->keyWaiting && host->keyWaiting(host->ctx))) frame();
@@ -169,19 +216,28 @@ static uint16_t start_input(void *ctx, int slot)
   }
 }
 
-// a frame wait: one video frame passes, and the timer interrupt's frame routine (1694:07D4) counts it
+// a frame wait: the next video frame (the timer handler counts it: START's 1694:07D4, while DS:1BAF says hooked)
 static void start_frame_poll(void *ctx, int site)
 {
   (void)ctx;
   (void)site;
   frame();
-  for (uint16_t a = 0x1BA8; a <= 0x1BAB; a++) (*far_ptr(START_DS, a))++;
+}
+
+static void start_timer_frame(void)
+{
+  if (*far_ptr(START_DS, 0x1BAF))
+    for (uint16_t a = 0x1BA8; a <= 0x1BAB; a++) (*far_ptr(START_DS, a))++;
 }
 
 static uint16_t bios_ticks(void *ctx)
 {
   (void)ctx;
-  return (uint16_t)(host->biosTicks ? host->biosTicks(host->ctx) : 0);
+  poll(false);
+  GameClock c;
+  uint32_t t;
+  clock_now(&c, &t);
+  return (uint16_t)t;
 }
 
 // the VGA's status (3DAh): each retrace is a frame's end, so that the waits for it take their real time
@@ -204,16 +260,189 @@ static int run_start(void)
   g_dsSeg = 0;
   start_attach(far_ptr(START_DS, 0), START_DS, GAME_SHARED_SEG, &h);
   exitCode = -1;
+  timerFrame = start_timer_frame;
   start_entry(GAME_PSP_SEG, e.ss, e.sp);
+  timerFrame = NULL;
   dos_free_owner(GAME_PSP_SEG);  // DOS frees the program's blocks
+  return exitCode;
+}
+
+static void clock_now(GameClock *c, uint32_t *biosTicks);
+
+// ---------------------------------------------------------------- the keyboard hooks
+
+// RP (and the action games) hook INT 9 with a handler that turns the direction keys into a joystick: Enter and
+// Backspace are its buttons, the keypad and the arrows its directions (one held at a time; pressed twice within 5
+// BIOS ticks, a full deflection). The handler's bytes in the program's data segment:
+typedef struct
+{
+  uint16_t handlerSeg, handlerOff;  // the handler's address (the hook is on while INT 9 points at it)
+  uint16_t x, y, b1, b2, held, lastTick, prefix, lastCode, skip, table;
+  uint8_t center;
+} KeyJoystick;
+static const KeyJoystick rpKeys = { 0x2E58, 0x0DA8, 0x339A, 0x339B, 0x339C, 0x339D, 0x339E, 0x339F, 0x33A1, 0x33A2, 0x33A3, 0x33A4, 0 };
+static const KeyJoystick *keyHook;
+static uint16_t keyDs;
+
+static void key_byte(uint8_t al)
+{
+  const KeyJoystick *k = keyHook;
+  uint8_t *ds = far_ptr(keyDs, 0);
+  if (ds[k->skip]) { ds[k->skip]--; return; }
+  bool afterPrefix = ds[k->prefix] == 0xE0;
+  ds[k->prefix] = al;
+  if (!afterPrefix && al == 0xE0) return;
+  if (!afterPrefix && al == 0xE1) { ds[k->skip] = 2; return; }
+  uint8_t ah = al;
+  al &= 0x7F;
+  if (al == 0x1C) { ds[k->b1] = ah & 0x80 ? 0 : 0xFF; return; }
+  if (al == 0x0E) { ds[k->b2] = ah & 0x80 ? 0 : 0xFF; return; }
+  if (al > 0x51 || al < 0x29) return;
+  al = ds[(uint16_t)(k->table + al - 0x29)];
+  if (!al) return;
+  if (ah & 0x80)  // released
+  {
+    if (ds[k->held] == al) ds[k->held] = 0, ds[k->x] = ds[k->y] = k->center;
+    return;
+  }
+  if (ds[k->held]) return;
+  ds[k->held] = al;
+  bool again = ds[k->lastCode] == al;
+  ds[k->lastCode] = al;
+  GameClock c;
+  uint32_t ticks;
+  clock_now(&c, &ticks);  // (not bios_ticks: this runs inside the host's event handling)
+  uint16_t now = (uint16_t)ticks;
+  uint8_t d = again && (uint16_t)(now - (ds[k->lastTick] | ds[k->lastTick + 1] << 8)) < 5 ? 0x7F : 0x5A;
+  if (al & 1) ds[k->y] = (uint8_t)(k->center - d);
+  if (al & 2) ds[k->y] = (uint8_t)(k->center + d);
+  if (al & 4) ds[k->x] = (uint8_t)(k->center - d);
+  if (al & 8) ds[k->x] = (uint8_t)(k->center + d);
+  ds[k->lastTick] = (uint8_t)now, ds[k->lastTick + 1] = (uint8_t)(now >> 8);
+}
+
+void game_key(uint8_t scan, bool extended, bool pressed)
+{
+  if (!keyHook) return;
+  uint16_t off = *(uint16_t *)far_ptr(0, 0x24), seg = *(uint16_t *)far_ptr(0, 0x26);
+  if (seg != keyHook->handlerSeg || off != keyHook->handlerOff) return;  // not hooked now
+  if (extended) key_byte(0xE0);
+  key_byte((uint8_t)(scan | (pressed ? 0 : 0x80)));
+}
+
+// ---------------------------------------------------------------- RP.EXE
+
+#define RP_DS 0x41E2
+
+static jmp_buf rpExit;
+static void rp_exit_(void *ctx, int code)
+{
+  (void)ctx;
+  exitCode = code;
+  longjmp(rpExit, 1);
+}
+
+static uint32_t rp_time_(void *ctx)
+{
+  (void)ctx;
+  poll(false);
+  GameClock c;
+  clock_now(&c, NULL);
+  // seconds since 1970 (days from the civil date)
+  int y = c.year - (c.month <= 2), era = y / 400, yoe = y - era * 400, mp = (c.month + 9) % 12;
+  int doy = (153 * mp + 2) / 5 + c.day - 1, doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  long days = era * 146097L + doe - 719468;
+  return (uint32_t)(days * 86400 + c.hour * 3600 + c.minute * 60 + c.second);
+}
+
+static int rp_key_waiting(void *ctx)
+{
+  (void)ctx;
+  poll(false);
+  return host->keyWaiting && host->keyWaiting(host->ctx);
+}
+
+static uint16_t rp_read_key(void *ctx)
+{
+  (void)ctx;
+  while (!rp_key_waiting(NULL)) frame();
+  return host->readKey(host->ctx);
+}
+
+// a frame wait (DS:3038): the next video frame (the timer handler counts it: RP's 168c:091C, while DS:303F says
+// hooked)
+static void rp_frame_poll(void *ctx, uint8_t flag)
+{
+  (void)ctx;
+  (void)flag;
+  frame();
+}
+
+static void rp_timer_frame(void)
+{
+  if (*far_ptr(RP_DS, 0x303F))
+    for (uint16_t a = 0x3038; a <= 0x303B; a++) (*far_ptr(RP_DS, a))++;
+}
+
+static uint16_t rp_bios_ticks(void *ctx) { return bios_ticks(ctx); }
+
+static void rp_subgame(void *ctx, int code)
+{
+  (void)ctx;
+  fprintf(stderr, "opensamurai: the %s is not in the reconstruction yet; it is skipped\n", code == 1 ? "duel" : code == 2 ? "battle" : "melee");
+}
+
+static int run_rp(void)
+{
+  ExeInfo e;
+  if (!program_load("RP.EXE", &e)) return -1;
+  // the C library's start-up (RP's is not reconstructed), as it leaves the data segment: the uninitialized data
+  // zeroed, the heap and stack limits, the divide-error vector it saves and replaces, the PSP, DOS's version,
+  // the standard handles (devices)
+  uint8_t *ds = far_ptr(RP_DS, 0);
+  memset(ds + 0x3A48, 0, 0x5518);
+  w16(RP_DS, 0x344A, 0xFFFF), w16(RP_DS, 0x344C, 0x975E), w16(RP_DS, 0x3450, 0x975E);
+  w16(RP_DS, 0x34AF, *(uint16_t *)far_ptr(0, 0)), w16(RP_DS, 0x34B1, *(uint16_t *)far_ptr(0, 2));
+  w16(0, 0x00, 0x00B8), w16(0, 0x02, 0x37FA);
+  w16(RP_DS, 0x34C1, GAME_PSP_SEG);
+  ds[0x34C3] = 5, ds[0x34C4] = 0;
+  for (int k = 0; k < 5; k++) ds[0x34CA + k] |= 0x40;
+  // DOS gives the program's memory back to the start-up's size (its DGROUP's 64 KB)
+  dos_resize(GAME_PSP_SEG, (uint16_t)(RP_DS + 0x1000 - GAME_PSP_SEG));
+  w16(GAME_PSP_SEG, 0x02, (uint16_t)(RP_DS + 0x1000));
+  // main's far return address (into the start-up) and its arguments (none) on the stack
+  w16(RP_DS, 0x9754, 0x00B2), w16(RP_DS, 0x9756, 0x37FA);
+  w16(RP_DS, 0x9758, 0), w16(RP_DS, 0x975A, 0), w16(RP_DS, 0x975C, 0);
+  static const uint16_t regs[9] = { 0x9754, 0, 0x396A, 0x396A, GAME_ENV_SEG, 0x80D3, 0xFFFF, 0x7FE5, 0x80D3 };
+  static RpHost rh = { rp_time_, rp_key_waiting, rp_read_key, rp_frame_poll, NULL, rp_bios_ticks, rp_exit_, rp_subgame, NULL, NULL };
+  rh.gameDir = host->gameDir;
+  g_dsSeg = 0;
+  rp_attach(far_ptr(RP_DS, 0), RP_DS, GAME_SHARED_SEG, &rh);
+  keyHook = &rpKeys;
+  keyDs = RP_DS;
+  exitCode = -1;
+  timerFrame = rp_timer_frame;
+  if (!setjmp(rpExit)) rp_main(regs);
+  timerFrame = NULL;
+  keyHook = NULL;
+  dos_free_owner(GAME_PSP_SEG);
   return exitCode;
 }
 
 int game_run(const GameHost *h)
 {
   if (!game_setup(h)) return -1;
+  t0 = h->now(h->ctx);
+  nextFrame = t0 + FRAME_US;
   asm_port_hook = port_in;
   int code = run_start();
+  // the launcher: RP and its exit codes (1-3 the action games, which RP runs itself while it hibernates: see
+  // rp_rt.c; 4 a new game: START again; 0 the end)
+  while (code == 1 || code == 4)
+  {
+    if (code == 4) code = run_start();
+    if (code == 1) code = run_rp();
+  }
   asm_port_hook = NULL;
   return code;
 }
