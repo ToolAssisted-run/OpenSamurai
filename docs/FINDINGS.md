@@ -595,6 +595,22 @@ slot 25 is a `retf` (the CGA palette tables are ignored); a 16-byte picture pale
 driver's master table (its segment D5, offset CE, 128 × 3 bytes, the first 16 the EGA colours), and a
 byte-per-pixel picture's values index that table.
 
+The travel encounters (*code*; the terrain names from MAP1.DAT's grid against OpenSamurai's screen of Satsuma).
+The walking loop 2706:0000 zeroes the trip's count DS:3DB4, and whenever `time()` passes a deadline 5 s ahead
+(about every 5-6 s, walking or not) calls 2706:0C0A with the tile under the figure (grid 20 × 20, cell 16 × 10 px,
+`map[(x/16)·20 + y/10]`): random(100) ≥ 50 ⇒ nothing; class by tile 0x35 open country 0, 0x34 road 1, 0x32
+coast / 0x33 river 2, 0x08 forest and hills 3, 0x16/0x17 village 4, 0x14 the bandits' fortress 5, 0x18 shrine
+6, 0x13 bridge 7, else 8; type = DS:2368[class][random(8)] (rows 1 1 2 7 / 2 7 10 10 / 1 2 6 6 / 1 1 5 8 9 /
+2 2 3 4 / 1 5 5 5 5 5 / 7 9 / 6 7 7 8 / none, zero-padded); type 0 or 3 accepted this trip ⇒ nothing; menu window
+DS:23F8[type] (0xF1..0xFA, item 1 = fight; only a fight counts). Types 1-6 and 10: melee DS:2424[type] (17, 18,
+19, 20, 21, 22, 23) with enemy swordsmanship DS:2360[rank] (64 samurai, 80 hatamoto), type 6 with shared+60 = 1
+and a duel with the pirate leader when the melee asks for one (window 0x101); types 7-9: duels (background
+DS:243A: 0, 1, 1), type 8 three in a row (+0, +16, +32; windows 0x103-0x106, the reward doubled). Win: honor
+clamp(((DS:2358[d] − sword) >> 4 unsigned) + 16, 12, 24) / 2 through 2706:1026, which halves any honor change with
+troops (ch[0].+2C = 1) and zeroes it disguised (2); ran away (shared+62): message 0x3A and −32 through 1026,
+skipped altogether when disguised; fell (shared+4E): the capture check 1568:03B0 (released on Tanto). Speed
+classes 3DBE: 0x08/0x33 slow (1), 0x34/0x13 fast (4), others 2. The travel mode never changes the odds.
+
 OpenSamurai gap: rp_rt.c's `rp_fopen` is a stub, so the Scroll of Honor (HONOR.SCL) is neither read nor written.
 
 RP's random stream (*code*): the resume path after a fight (23BB:0222 after the context restore) does not call the
