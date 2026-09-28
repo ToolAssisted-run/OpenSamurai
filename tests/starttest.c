@@ -30,7 +30,7 @@ typedef struct { uint16_t site; uint8_t bytes[32]; int check; } Wait;
 
 static Check *chk;
 static int nchk;
-static Queue qd[8], qclock[2], qticks;  // qclock: INT 21h 2Ah, 2Ch  // qd: MISC slots 90..97
+static Queue qd[8], qclock[3], qticks;  // qclock: INT 21h 2Ah, 2Ch, 0Bh  // qd: MISC slots 90..97
 static Wait *waits;
 static int nwaits;
 static int exitCode = -1, exitCheck = -1;
@@ -72,7 +72,8 @@ static uint32_t host_clock(void *ctx, int ah)
 {
   (void)ctx;
   uint32_t v = 0;
-  if (!pop(&qclock[ah == 0x2C], &v)) problem("the C asked for %s the game did not", ah == 0x2C ? "DOS's time" : "DOS's date");
+  int q = ah == 0x2C ? 1 : ah == 0x0B ? 2 : 0;
+  if (!pop(&qclock[q], &v)) problem("the C asked for %s the game did not", qclock[q].name);
   return v;
 }
 
@@ -149,6 +150,17 @@ static void host_frame_poll(void *ctx, int site)
   if (w->check >= 0) compare(w->check, what);
 }
 
+// TRACEWAIT=N: the functions the C enters from frame wait N on (the first TRACEMAX, default 2000)
+static int traceWait = -1, traceLeft = 2000;
+static void trace_fn(uint32_t addr)
+{
+  if (waitPos >= traceWait && traceLeft > 0)
+  {
+    traceLeft--;
+    printf("F %04X:%04X sp=%04X ax=%04X bx=%04X cx=%04X dx=%04X\n", addr >> 16, addr & 0xFFFF, R.sp, R.ax, R.bx, R.cx, R.dx);
+  }
+}
+
 static void host_exit(void *ctx, int code)
 {
   (void)ctx;
@@ -209,12 +221,12 @@ int main(int argc, char **argv)
       int w = (int)strtol(q, &p, 10);
       if (slot >= 90 && slot <= 97) push(&qd[slot - 90], v, n, p == q ? -1 : w);
     }
-    else if (!strncmp(p, "dos ", 4))  // 2A or 2C
+    else if (!strncmp(p, "dos ", 4))  // 2A, 2C or 0B
     {
       int ah = (int)strtol(p + 4, &q, 16);
       uint32_t v = (uint32_t)strtoul(q, &q, 16), n = (uint32_t)strtoul(q, &q, 10);
       int w = (int)strtol(q, &p, 10);
-      push(&qclock[ah == 0x2C], v, n, p == q ? -1 : w);
+      push(&qclock[ah == 0x2C ? 1 : ah == 0x0B ? 2 : 0], v, n, p == q ? -1 : w);
     }
     else if (!strncmp(p, "ticks ", 6)) push(&qticks, (uint32_t)strtoul(p + 6, 0, 16), 1, -1);
     else if (!strncmp(p, "wait ", 5))
@@ -237,6 +249,7 @@ int main(int argc, char **argv)
   for (int k = 0; k < 8; k++) qd[k].name = names[k];
   qclock[0].name = "DOS's date";
   qclock[1].name = "DOS's time";
+  qclock[2].name = "DOS's kbhit";
   qticks.name = "the BIOS ticks";
   StartHost host = { host_clock, host_input, host_frame_poll, host_ticks, host_exit, argv[3], NULL };
   start_attach(ds, DS_SEG, SHARED_SEG, &host);
@@ -245,6 +258,12 @@ int main(int argc, char **argv)
   memcpy(ds, mainDs, dsLen);
   memcpy(shared.b, mainSh, SHARED_SIZE);
   dos_arena_from_memory(0x2700, 0xA000);
+  if (getenv("TRACEWAIT"))
+  {
+    traceWait = atoi(getenv("TRACEWAIT"));
+    if (getenv("TRACEMAX")) traceLeft = atoi(getenv("TRACEMAX"));
+    start_trace = trace_fn;
+  }
   int r = setjmp(exitJump);
   if (!r) start_main(regs);
   if (r == 2) printf("  gave up: too many differences in the inputs\n");

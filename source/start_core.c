@@ -763,8 +763,9 @@ static void a_1000_04a1(void)
 {
   FN(0x100004A1);
   R.cs = 0x27cc;
+  goto L_04a1;
 L_049c:   PUSH(0x27cc); PUSH(0x04a1); start_driver(91);   /* driver slot 91 */ // 049c lcall 0x783, 0x1d97
-  PUSH(0x27cc); PUSH(0x04a6); start_driver(90);   /* driver slot 90 */ // 04a1 lcall 0x783, 0x1d92
+L_04a1:   PUSH(0x27cc); PUSH(0x04a6); start_driver(90);   /* driver slot 90 */ // 04a1 lcall 0x783, 0x1d92
   R.ax = (u16)(OR16(R.ax, R.ax));                              // 04a6 or ax, ax
   if (R.zf) goto L_049c;                                       // 04a8 je 0x49c
   R.sp += 2; goto L_ret;                                       // 04aa ret
@@ -9457,13 +9458,14 @@ static void a_1000_50b8(void)
 {
   FN(0x100050B8);
   R.cs = 0x27cc;
+  goto L_50b8;
 L_50a9:   PUSH(R.ax);                                                  // 50a9 push ax
   PUSH(0x50ad); a_1000_59ba();                                 // 50aa call 0x59ba
   PUSH(0x50b0); a_1000_5a2d();                                 // 50ad call 0x5a2d
   R.ax = (u16)(0xff);                                          // 50b0 mov ax, 0xff
   PUSH(R.ax);                                                  // 50b3 push ax
   ASM_INDIRECT_CALL(M16(DS, (u16)(0x1f8a))); /* call word ptr [0x1f8a] */ // 50b4 call word ptr [0x1f8a]
-  SETH(R.ax, 0x30);                                            // 50b8 mov ah, 0x30
+L_50b8:   SETH(R.ax, 0x30);                                            // 50b8 mov ah, 0x30
   ASM_INT(0x21);                                               // 50ba int 0x21
   W16(DS, (u16)(0x1fff), R.ax);                                // 50bc mov word ptr [0x1fff], ax
   R.ax = (u16)(0x3500);                                        // 50bf mov ax, 0x3500
@@ -11078,6 +11080,7 @@ static void a_1000_59da(void)
 {
   FN(0x100059DA);
   R.cs = 0x27cc;
+  goto L_59da;
 L_50a9:   PUSH(R.ax);                                                  // 50a9 push ax
   PUSH(0x50ad); a_1000_59ba();                                 // 50aa call 0x59ba
   PUSH(0x50b0); a_1000_5a2d();                                 // 50ad call 0x5a2d
@@ -11330,11 +11333,12 @@ static void a_1000_5a5e(void)
 {
   FN(0x10005A5E);
   R.cs = 0x27cc;
+  goto L_5a5e;
 L_5a58:   R.ax = (u16)(XOR16(R.ax, R.ax));                             // 5a58 xor ax, ax
   R.sp = (u16)(R.bp);                                          // 5a5a mov sp, bp
   R.bp = POP();                                                // 5a5c pop bp
   R.sp += 2; goto L_ret;                                       // 5a5d ret
-  if (!R.cf) goto L_5a58;                                      // 5a5e jae 0x5a58
+L_5a5e:   if (!R.cf) goto L_5a58;                                      // 5a5e jae 0x5a58
   PUSH(R.ax);                                                  // 5a60 push ax
   PUSH(0x5a64); a_1000_5a7c();                                 // 5a61 call 0x5a7c
   R.ax = POP();                                                // 5a64 pop ax
@@ -11799,6 +11803,7 @@ static void a_1000_5d38(void)
 {
   FN(0x10005D38);
   R.cs = 0x27cc;
+  goto L_5d38;
 L_5a56:   FN(0x10005A56); if (R.cf) goto L_5a6b;                       // 5a56 jb 0x5a6b
   R.ax = (u16)(XOR16(R.ax, R.ax));                             // 5a58 xor ax, ax
   R.sp = (u16)(R.bp);                                          // 5a5a mov sp, bp
@@ -11810,7 +11815,7 @@ L_5a6b:   PUSH(0x5a6e); a_1000_5a7c();                                 // 5a6b c
   R.sp = (u16)(R.bp);                                          // 5a72 mov sp, bp
   R.bp = POP();                                                // 5a74 pop bp
   R.sp += 2; goto L_ret;                                       // 5a75 ret
-  PUSH(R.bp);                                                  // 5d38 push bp
+L_5d38:   PUSH(R.bp);                                                  // 5d38 push bp
   R.bp = (u16)(R.sp);                                          // 5d39 mov bp, sp
   R.bx = (u16)(M16(SS, (u16)(R.bp + 0x4)));                    // 5d3b mov bx, word ptr [bp + 4]
   SUB16(R.bx, M16(DS, (u16)(0x2004)));                         // 5d3e cmp bx, word ptr [0x2004]
@@ -11841,6 +11846,7 @@ static void a_1000_5d58(void)
 {
   FN(0x10005D58);
   R.cs = 0x27cc;
+  goto L_5d58;
 L_5a69:   FN(0x10005A69); if (!R.cf) goto L_5a72;                      // 5a69 jae 0x5a72
   PUSH(0x5a6e); a_1000_5a7c();                                 // 5a6b call 0x5a7c
   R.ax = (u16)(0xffff);                                        // 5a6e mov ax, 0xffff
@@ -11848,7 +11854,7 @@ L_5a69:   FN(0x10005A69); if (!R.cf) goto L_5a72;                      // 5a69 j
 L_5a72:   R.sp = (u16)(R.bp);                                          // 5a72 mov sp, bp
   R.bp = POP();                                                // 5a74 pop bp
   R.sp += 2; goto L_ret;                                       // 5a75 ret
-  PUSH(R.bp);                                                  // 5d58 push bp
+L_5d58:   PUSH(R.bp);                                                  // 5d58 push bp
   R.bp = (u16)(R.sp);                                          // 5d59 mov bp, sp
   R.sp = (u16)(SUB16(R.sp, 0x2));                              // 5d5b sub sp, 2
   R.bx = (u16)(M16(SS, (u16)(R.bp + 0x4)));                    // 5d5e mov bx, word ptr [bp + 4]
@@ -11959,6 +11965,7 @@ static void a_1000_5e36(void)
 {
   FN(0x10005E36);
   R.cs = 0x27cc;
+  goto L_5e36;
 L_50a9:   PUSH(R.ax);                                                  // 50a9 push ax
   PUSH(0x50ad); a_1000_59ba();                                 // 50aa call 0x59ba
   PUSH(0x50b0); a_1000_5a2d();                                 // 50ad call 0x5a2d
@@ -12056,7 +12063,7 @@ L_5a69:   FN(0x10005A69); if (!R.cf) goto L_5a72;                      // 5a69 j
 L_5a72:   R.sp = (u16)(R.bp);                                          // 5a72 mov sp, bp
   R.bp = POP();                                                // 5a74 pop bp
   R.sp += 2; goto L_ret;                                       // 5a75 ret
-  PUSH(R.bp);                                                  // 5e36 push bp
+L_5e36:   PUSH(R.bp);                                                  // 5e36 push bp
   R.bp = (u16)(R.sp);                                          // 5e37 mov bp, sp
   R.sp = (u16)(SUB16(R.sp, 0x8));                              // 5e39 sub sp, 8
   R.bx = (u16)(M16(SS, (u16)(R.bp + 0x4)));                    // 5e3c mov bx, word ptr [bp + 4]
@@ -12180,6 +12187,7 @@ static void a_1000_5edc(void)
 {
   FN(0x10005EDC);
   R.cs = 0x27cc;
+  goto L_5edc;
 L_5a69:   FN(0x10005A69); if (!R.cf) goto L_5a72;                      // 5a69 jae 0x5a72
   PUSH(0x5a6e); a_1000_5a7c();                                 // 5a6b call 0x5a7c
   R.ax = (u16)(0xffff);                                        // 5a6e mov ax, 0xffff
@@ -12187,7 +12195,7 @@ L_5a69:   FN(0x10005A69); if (!R.cf) goto L_5a72;                      // 5a69 j
 L_5a72:   R.sp = (u16)(R.bp);                                          // 5a72 mov sp, bp
   R.bp = POP();                                                // 5a74 pop bp
   R.sp += 2; goto L_ret;                                       // 5a75 ret
-  PUSH(R.ax);                                                  // 5edc push ax
+L_5edc:   PUSH(R.ax);                                                  // 5edc push ax
   PUSH(R.bx);                                                  // 5edd push bx
   PUSH(R.cx);                                                  // 5ede push cx
   R.cx = (u16)(R.di);                                          // 5edf mov cx, di
@@ -12242,6 +12250,7 @@ static void a_1000_5f1c(void)
 {
   FN(0x10005F1C);
   R.cs = 0x27cc;
+  goto L_5f1c;
 L_5a69:   FN(0x10005A69); if (!R.cf) goto L_5a72;                      // 5a69 jae 0x5a72
   PUSH(0x5a6e); a_1000_5a7c();                                 // 5a6b call 0x5a7c
   R.ax = (u16)(0xffff);                                        // 5a6e mov ax, 0xffff
@@ -12249,7 +12258,7 @@ L_5a69:   FN(0x10005A69); if (!R.cf) goto L_5a72;                      // 5a69 j
 L_5a72:   R.sp = (u16)(R.bp);                                          // 5a72 mov sp, bp
   R.bp = POP();                                                // 5a74 pop bp
   R.sp += 2; goto L_ret;                                       // 5a75 ret
-  R.ax = (u16)(M16(SS, (u16)(R.bp + 0xfffe)));                 // 5f1c mov ax, word ptr [bp - 2]
+L_5f1c:   R.ax = (u16)(M16(SS, (u16)(R.bp + 0xfffe)));                 // 5f1c mov ax, word ptr [bp - 2]
   R.ax = (u16)(SUB16(R.ax, M16(SS, (u16)(R.bp + 0xfffc))));    // 5f1f sub ax, word ptr [bp - 4]
   R.sp = (u16)(M16(SS, (u16)(R.bp + 0xfff8)));                 // 5f22 mov sp, word ptr [bp - 8]
   R.si = POP();                                                // 5f25 pop si
@@ -12272,6 +12281,7 @@ static void a_1000_5f2a(void)
 {
   FN(0x10005F2A);
   R.cs = 0x27cc;
+  goto L_5f2a;
 L_5a69:   FN(0x10005A69); if (!R.cf) goto L_5a72;                      // 5a69 jae 0x5a72
   PUSH(0x5a6e); a_1000_5a7c();                                 // 5a6b call 0x5a7c
   R.ax = (u16)(0xffff);                                        // 5a6e mov ax, 0xffff
@@ -12280,7 +12290,7 @@ L_5a72:   R.sp = (u16)(R.bp);                                          // 5a72 m
   R.bp = POP();                                                // 5a74 pop bp
   R.sp += 2; goto L_ret;                                       // 5a75 ret
 L_5f27:   goto L_5a69;                                                 // 5f27 jmp 0x5a69
-  R.cx = (u16)(M16(SS, (u16)(R.bp + 0x8)));                    // 5f2a mov cx, word ptr [bp + 8]
+L_5f2a:   R.cx = (u16)(M16(SS, (u16)(R.bp + 0x8)));                    // 5f2a mov cx, word ptr [bp + 8]
   R.cx = (u16)(OR16(R.cx, R.cx));                              // 5f2d or cx, cx
   if (!R.zf) goto L_5f36;                                      // 5f2f jne 0x5f36
   R.ax = (u16)(R.cx);                                          // 5f31 mov ax, cx
@@ -12549,6 +12559,7 @@ static void a_1000_60ac(void)
 {
   FN(0x100060AC);
   R.cs = 0x27cc;
+  goto L_60ac;
 L_5a56:   FN(0x10005A56); if (R.cf) goto L_5a6b;                       // 5a56 jb 0x5a6b
   R.ax = (u16)(XOR16(R.ax, R.ax));                             // 5a58 xor ax, ax
   R.sp = (u16)(R.bp);                                          // 5a5a mov sp, bp
@@ -12560,7 +12571,7 @@ L_5a6b:   PUSH(0x5a6e); a_1000_5a7c();                                 // 5a6b c
   R.sp = (u16)(R.bp);                                          // 5a72 mov sp, bp
   R.bp = POP();                                                // 5a74 pop bp
   R.sp += 2; goto L_ret;                                       // 5a75 ret
-  PUSH(R.bp);                                                  // 60ac push bp
+L_60ac:   PUSH(R.bp);                                                  // 60ac push bp
   R.bp = (u16)(R.sp);                                          // 60ad mov bp, sp
   R.dx = (u16)(M16(SS, (u16)(R.bp + 0x4)));                    // 60af mov dx, word ptr [bp + 4]
   SETH(R.ax, 0x41);                                            // 60b2 mov ah, 0x41
@@ -12739,6 +12750,7 @@ static void a_1000_61c2(void)
 {
   FN(0x100061C2);
   R.cs = 0x27cc;
+  goto L_61c2;
 L_5a69:   FN(0x10005A69); if (!R.cf) goto L_5a72;                      // 5a69 jae 0x5a72
   PUSH(0x5a6e); a_1000_5a7c();                                 // 5a6b call 0x5a7c
   R.ax = (u16)(0xffff);                                        // 5a6e mov ax, 0xffff
@@ -12746,7 +12758,7 @@ L_5a69:   FN(0x10005A69); if (!R.cf) goto L_5a72;                      // 5a69 j
 L_5a72:   R.sp = (u16)(R.bp);                                          // 5a72 mov sp, bp
   R.bp = POP();                                                // 5a74 pop bp
   R.sp += 2; goto L_ret;                                       // 5a75 ret
-  PUSH(R.bp);                                                  // 61c2 push bp
+L_61c2:   PUSH(R.bp);                                                  // 61c2 push bp
   R.bp = (u16)(R.sp);                                          // 61c3 mov bp, sp
   R.sp = (u16)(SUB16(R.sp, 0x4));                              // 61c5 sub sp, 4
   SETH(R.bx, XOR8((u8)(R.bx >> 8), (u8)(R.bx >> 8)));          // 61c8 xor bh, bh
@@ -13332,8 +13344,9 @@ static void a_1000_6605(void)
 {
   FN(0x10006605);
   R.cs = 0x27cc;
+  goto L_6605;
 L_6602:   goto L_66d3;                                                 // 6602 jmp 0x66d3
-  R.cx = (u16)(INC16(R.cx));                                   // 6605 inc cx
+L_6605:   R.cx = (u16)(INC16(R.cx));                                   // 6605 inc cx
   if (R.zf) goto L_6602;                                       // 6606 je 0x6602
   SETL(R.cx, AND8((u8)R.cx, 0xfe));                            // 6608 and cl, 0xfe
   SUB16(R.cx, 0xffee);                                         // 660b cmp cx, -0x12
@@ -14866,6 +14879,7 @@ static void a_1694_05d5(void)
 {
   FN(0x169405D5);
   R.cs = 0x2e60;
+  goto L_05d5;
 L_057a:   FN(0x1694057A); R.ax = (u16)(0x2f4f /* segment */);          // 057a mov ax, 0x783
   R.es = (u16)(R.ax);                                          // 057d mov es, ax
   R.cx = (u16)(R.di);                                          // 057f mov cx, di
@@ -14900,7 +14914,7 @@ L_05c9:   R.di = (u16)(ADD16(R.di, R.dx));                             // 05c9 a
   R.ax = (u16)(R.si);                                          // 05d0 mov ax, si
   REPSTOSW();                                                  // 05d2 rep stosw word ptr es:[di], ax
 L_05d4:   R.sp += 2; goto L_ret;                                       // 05d4 ret
-  R.si = (u16)(SUB16(R.si, R.si));                             // 05d5 sub si, si
+L_05d5:   R.si = (u16)(SUB16(R.si, R.si));                             // 05d5 sub si, si
   R.bx = (u16)(OR16(R.bx, R.bx));                              // 05d7 or bx, bx
   if (R.sf) goto L_057a;                                       // 05d9 js 0x57a
   R.si = (u16)(M16(DS, (u16)(0x180f)));                        // 05db mov si, word ptr [0x180f]

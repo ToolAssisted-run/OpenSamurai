@@ -95,7 +95,12 @@ static u8 lzw_byte(const LzwLayout *L, u16 *si, u16 *dx)
       ++*P8(L->width);
       *P16(L->mask) = (u16)((*P16(L->mask) << 1) | 1);
     }
-    if ((i8)*P8(L->width) > (i8)*P8(L->width + 1)) { lzw_reset_table(L); *dx = *P16(L->next); }
+    if ((i8)*P8(L->width) > (i8)*P8(L->width + 1))
+    {
+      lzw_reset_table(L);
+      *dx = *P16(L->next);
+      cx = 0;  // the reset's loops count in CX: the previous code is 0 after it
+    }
     *P16(L->prev) = cx;
   }
   u8 b = *P8(sp);
@@ -152,7 +157,7 @@ u16 lzw_pic_header(const LzwLayout *L)
   *P16(L->header + 2) = lzw_word(L, &si);
   *P16(L->readPtr) = si;
   if (flags & 0x8) { L->palette(si); *P16(L->readPtr) = (u16)(si + 0x10); }
-  else if (flags & 0x10) { L->palette(si); *P16(L->readPtr) = (u16)(si + 0x80); }
+  else if ((flags & 0x10) && L->bigPalette) { L->palette(si); *P16(L->readPtr) = (u16)(si + 0x80); }
   lzw_init(L);
   return *P16(L->header + 2);
 }

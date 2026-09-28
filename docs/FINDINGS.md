@@ -231,7 +231,7 @@ captures are driven by random menu keys from a new game (the workspace's oracle/
 by comparing the functions entered and the events served with the real game's instruction trace, filtered
 through a FIFO (oracle/rtrace.sh).
 
-### 5.5 The start-up program (START.EXE) — recompiled in source/start_core.c, verification in progress
+### 5.5 The start-up program (START.EXE) — recompiled in source/start_core.c, verified
 
 START is the floppy's program (445.03), with its copy protection: the crest quiz runs while shared+0x2E is 0
 (the provided game directory has a cracked START.EXE that sets the flag and skips it; the floppy prevails).
@@ -256,6 +256,12 @@ and the interrupt handlers (INT 8, the frame timer; INT 1Bh, Ctrl-Break): the ho
 - 1000:04A1 is both the return point of flush_keys' key read (049C) and flush_keys' entry (and its first jump's
   target): a capture's probe there is a key read only after a "key waiting" answer at 04A6.
 
+- The picture decoder's table reset (when the codes outgrow 12 bits) counts its loops in CX, which then holds
+  the code just read: the "previous code" stored after the reset is therefore 0, and the next string (code 256)
+  gets prefix 0. RP's decoder is the same module (the fix is in the shared source/lzw.c).
+- The library's open() jumps back into shared error code below its entry (5A69): the recompiled function enters
+  at its entry (asm2c now emits the jump when code precedes the entry; RP's functions are regenerated alike).
+
 Verification: tests/starttest.c runs START from main (its state captured there: the data segment, the shared
 block, all of conventional memory) to exit() on a capture's answers, and compares the data segment and the shared
 block at every frame wait's end and at exit(). Each kind of answer is a queue of its own; a run of equal answers
@@ -263,7 +269,11 @@ carries the number of frame waits before it, so an answer the C takes at another
 happens. Excluded from the comparison: the stack (DS:4F90-578F: the uninitialized locals hold what the timer
 interrupt pushed there in the real game) and the picture decoder's private stack. Captures: the workspace's
 oracle/gen_start.py, st_ev.py, cap_start.sh (random menu keys, letters and digits from the setup on, on a disk
-built from the floppy's files).
+built from the floppy's files; with QUIZ=3 the quiz answered right: skip at 1900 and 2300, three downs, Enter --
+the Date clan's crest is the fourth that run). 12 captures pass from main to exit(1), 38,000 frame waits: the
+title, the credits, the quiz failed (8) and passed (4), the career menu, the Scroll of Honor, Restore, the name,
+the province map, difficulty, family advantage. Not covered yet: the encounters of the career menu, the
+joystick (the captures have none), the sound boards.
 
 ## 6. Methods
 
@@ -306,7 +316,7 @@ F-keys not at all; decoded with the workspace's work/jrsrkeys.py.
 
 ## 8. Log
 
-- 2026-09-28: START recompiled whole (the library too) and run from main against a capture: 2483 frame waits equal.
+- 2026-09-28: START recompiled whole (the library too); 12 captures pass from main to exit.
 - 2026-09-27: the melee translated over its data segment and corrected until it matched its captures.
 - 2026-09-27: the battle's simulation reconstructed and verified against 96 captures (63,535 steps).
 - 2026-09-27: the duel's simulation reconstructed and verified against 64 captures (211 duels).

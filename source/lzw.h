@@ -22,6 +22,7 @@ typedef struct
   u16 readPtr, readEnd;  // the input stream's read pointer and end (near)
   u16 refill;            // the far pointer to the stream's refill function
   u16 refillSeg;         // the decoder's code segment (the return address pushed for the refill)
+  bool bigPalette;       // the header's flag 0x10 (a 128-byte palette) is known (RP, START; not DUEL's version)
   void (*palette)(u16 at);  // a picture's palette at DS:at (graphics slot 25)
   void (*farCall)(u16 seg, u16 off);  // the program's far calls through a pointer (the refill)
 } LzwLayout;

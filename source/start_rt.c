@@ -140,7 +140,7 @@ static void st_lzw_palette(u16 at) { gfx_call(25, 0, at); }
 // DS:2A6C the string table, 4272-4284 the decoder's variables, its stack DS:4285-4484, 426C/426E/4270 width,
 // height, length; the input: the stream at DS:494E (end DS:181E), refilled through the far pointer at DS:4C2E
 static const LzwLayout stLzw = { 0x2a6c, 0x4272, 0x4485, 0x4274, 0x4276, 0x4278, 0x427a, 0x427c, 0x427e, 0x4281, 0x4282,
-                                 0x426c, 0x494e, 0x181e, 0x4c2e, 0x2f23, st_lzw_palette, st_far_call };
+                                 0x426c, 0x494e, 0x181e, 0x4c2e, 0x2f23, true, st_lzw_palette, st_far_call };
 
 u16 st_PicHeader(void)
 {
@@ -198,7 +198,7 @@ i16 st_int86(i16 n, i16 in, i16 out)
 
 static FILE *files[20];
 static int debugFiles = -1;
-#define DEBUG_FILES (debugFiles < 0 ? (debugFiles = getenv("START_DEBUG_FILES") != NULL) : debugFiles)
+#define DEBUG_FILES (debugFiles < 0 ? (debugFiles = getenv("START_DEBUG_FILES") ? atoi(getenv("START_DEBUG_FILES")) : 0) : debugFiles)
 
 static FILE *open_game_file(const char *name)
 {
@@ -236,6 +236,7 @@ static bool start_int(u8 n)
     return true;
   }
   if (n != 0x21) return false;
+  if (DEBUG_FILES > 1) fprintf(stderr, "start: int 21h AX=%04X BX=%04X CX=%04X DX=%04X\n", R.ax, R.bx, R.cx, R.dx);
   switch (ah)
   {
   case 0x09:  // a '$' message
@@ -248,11 +249,14 @@ static bool start_int(u8 n)
   case 0x2A:  // the date and the time (time())
   case 0x2C:
   {
-    u32 v = host && host->dosClock ? host->dosClock(host->ctx, ah) : 0;
+    u32 v = host && host->dos ? host->dos(host->ctx, ah) : 0;
     R.cx = (u16)(v >> 16);
     R.dx = (u16)v;
     return true;
   }
+  case 0x0B:  // a character waiting on the standard input (kbhit())
+    R.ax = (u16)((R.ax & 0xFF00) | ((host && host->dos ? host->dos(host->ctx, ah) : 0) & 0xFF));
+    return true;
   case 0x25:  // set an interrupt vector (the timer's, Ctrl-Break's: their handlers are the host's)
     *(u16a *)far_ptr(0, (u16)(al * 4)) = R.dx;
     *(u16a *)far_ptr(0, (u16)(al * 4 + 2)) = R.ds;
@@ -337,6 +341,14 @@ static bool start_int(u8 n)
     {
       R.dx = R.bx < 5 ? 0x80D3 : 0x0002;
       R.ax = R.dx;
+      R.cf = 0;
+      return true;
+    }
+    break;
+  case 0x43:  // a file's attributes (the library's open(): read-only or not): an archive
+    if (al == 0x00)
+    {
+      R.cx = 0x20;
       R.cf = 0;
       return true;
     }

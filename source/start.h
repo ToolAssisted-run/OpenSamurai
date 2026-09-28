@@ -11,9 +11,9 @@
 // What the program takes from the outside world while it runs
 typedef struct
 {
-  // DOS's clock: INT 21h 2Ah the date (CX year, DH month, DL day), 2Ch the time (CH hours, CL minutes, DH seconds,
-  // DL hundredths): CX << 16 | DX
-  uint32_t (*dosClock)(void *ctx, int ah);
+  // DOS's answers: INT 21h 2Ah the date (CX year, DH month, DL day), 2Ch the time (CH hours, CL minutes, DH
+  // seconds, DL hundredths): CX << 16 | DX; 0Bh (kbhit) a character is waiting: AL
+  uint32_t (*dos)(void *ctx, int ah);
   // the MISC driver's answers: 90 a key is waiting (0 yes, FFFF no), 91 the next key (scan code << 8 | ASCII),
   // 95 a joystick button (1 pressed), 96 and 97 the axes
   uint16_t (*input)(void *ctx, int slot);

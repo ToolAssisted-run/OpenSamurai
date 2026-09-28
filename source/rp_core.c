@@ -37588,7 +37588,7 @@ static u16 f_290b_0566(u16 p0, u16 p1, u16 p2)
 // refilled through the far pointer at DS:7F46)
 static void rp_lzw_palette(u16 at) { rp_drv(25, 0, at); }
 static const LzwLayout rpLzw = { 0x419a, 0x59a0, 0x5bb3, 0x59a2, 0x59a4, 0x59a6, 0x59a8, 0x59aa, 0x59ac, 0x59af, 0x59b0,
-                                 0x599a, 0x7924, 0x2cae, 0x7f46, 0x40d7, rp_lzw_palette, asm_far_call };
+                                 0x599a, 0x7924, 0x2cae, 0x7f46, 0x40d7, true, rp_lzw_palette, asm_far_call };
 static u16 f_2965_0008(void)
 {
   FN(0x29650008);
