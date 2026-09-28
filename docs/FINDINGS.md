@@ -556,7 +556,15 @@ towards him by 12 (1568:06FC(0, t, 12)). An NPC target decides with two simulati
 to 6C94 and restored): refusal = t's honor − clamp(honor_c, 32 + 6 × difficulty, 128), rescore (133F:09CA),
 R = (128 − honor_t) × t.+5E / 128; fight = 133F:1456(t, 128·sword_c / (sword_c + sword_t + 1), 0) and
 133F:1456(c, 128·sword_t / (… + 1), 1), rescore, F = t.+5E × honor_t / 128; t refuses when R > F (no random
-number). A real refusal costs t clamp(honor_c, 32, 128) honor (the floor has no difficulty term), message 0x5C
+number). The rescore makes +5E a deficit (≤ 0): Σ over the characters ranked above of (score_i − score_j) ×
+DS:7F34 / 8, with score (133F:0D3C) = (land/4 + clamp(land, 0, troops' + 16)/3 + honor + troops') × 24/16 + gen/4 +
+sword/4 − 2 × (16 − honor) below 16 honor (troops' = troops, ×2 at rank 3). So t refuses when (128 − h) ×
+deficit(refuse) < h × deficit(fight): the honor weight multiplies the fight's loss, and an honorable target is the
+one that refuses; a target first after the fight never refuses, one first only by refusing always does; with the
+reign counter 7F34 = 0 every deficit is 0 and nobody refuses. 133F:1456 with an heir (1568:0048 ≠ −1) takes the
+succession path whatever the percentage (the heir's stats 64..128/128 by heir age: < 15, 15, 21, 31, 51, 71 years),
+so the swordsmanship ratio only counts for heirless characters. The difficulty floor 32 + 6d only matters when the
+challenger's honor is below it. A real refusal costs t clamp(honor_c, 32, 128) honor (the floor has no difficulty term), message 0x5C
 (player challenger, who is sent home, 1568:0964) or 0x58 (NPC challenger, sent home), and the desertion check
 (1568:0818) for t. The player refusing an NPC's challenge (menu 0x5D): clamp(honor_c, 32, 128), message 0x5E,
 desertion check. Accepted: the player's duel (23BB:019E, sword ±4 on return) — won: 0x66 and the opponent dies
