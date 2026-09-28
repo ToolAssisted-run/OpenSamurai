@@ -8,12 +8,13 @@ Regs R;
 bool g_asmCall;
 
 // a divide error: the INT 0 vector (0000:0000) says whose handler runs. The drawing routines of RP and START (their
-// assembly modules) catch the overflows of their slope divisions: their handlers return +-7F00h by the sign of the
+// assembly modules; DUEL's) catch the overflows of their slope divisions: their handlers return +-7F00h by the sign of the
 // dividend and a sign word the faulting division picks, and resume after the division (a 4-byte idiv)
 static const struct { u16 seg, off, ip, wordAt, wordElse; } divHandlers[] = {
   { 0x2E58, 0x0305, 0x0296, 0x2c99, 0x2c97 },  // RP 168c:0305, the lines
   { 0x2E58, 0x04DA, 0x0454, 0x2ca7, 0x2ca5 },  // RP 168c:04DA, the polygons
   { 0x2E60, 0x01BD, 0x014E, 0x1809, 0x1807 },  // START 1694:01BD
+  { 0x2CFF, 0x083F, 0x07D0, 0x26AF, 0x26AD },  // DUEL 1533:083F
 };
 void asm_divide_error(u16 ip)
 {

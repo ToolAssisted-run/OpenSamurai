@@ -10,6 +10,7 @@
 #include <strings.h>
 
 #include "asm2c.h"
+#include "dos.h"
 #include "dosmem.h"
 #include "lzw.h"
 #include "start.h"
@@ -188,40 +189,19 @@ i16 st_int86(i16 n, i16 in, i16 out)
   return (i16)asm_msc_int86((u8)n, (u16)in, (u16)out, &stErrno);
 }
 
-// ---------------------------------------------------------------- DOS and the BIOS
+// ---------------------------------------------------------------- DOS and the BIOS (dos.c)
 
-static FILE *files[20];
-static int debugFiles = -1;
-#define DEBUG_FILES (debugFiles < 0 ? (debugFiles = getenv("START_DEBUG_FILES") ? atoi(getenv("START_DEBUG_FILES")) : 0) : debugFiles)
-
-static FILE *open_game_file(const char *name)
+static uint32_t dos_answer(void *ctx, int ah)
 {
-  const char *dir = host && host->gameDir ? host->gameDir : ".";
-  DIR *d = opendir(dir);
-  if (!d) return NULL;
-  struct dirent *e;
-  FILE *f = NULL;
-  while ((e = readdir(d)))
-    if (!strcasecmp(e->d_name, name))
-    {
-      char path[1024];
-      snprintf(path, sizeof path, "%s/%s", dir, e->d_name);
-      f = fopen(path, "rb");
-      break;
-    }
-  closedir(d);
-  return f;
+  (void)ctx;
+  return host && host->dos ? host->dos(host->ctx, ah) : 0;
 }
 
-static void dos_error(u16 code)
-{
-  R.ax = code;
-  R.cf = 1;
-}
+static void dos_exit(int code) { st_exit((i16)code); }
 
 static bool start_int(u8 n)
 {
-  u8 ah = (u8)(R.ax >> 8), al = (u8)R.ax;
+  u8 ah = (u8)(R.ax >> 8);
   if (n == 0x1A && ah == 0x00)  // the BIOS tick count
   {
     R.cx = 0;
@@ -230,132 +210,8 @@ static bool start_int(u8 n)
     return true;
   }
   if (n != 0x21) return false;
-  if (DEBUG_FILES > 1) fprintf(stderr, "start: int 21h AX=%04X BX=%04X CX=%04X DX=%04X\n", R.ax, R.bx, R.cx, R.dx);
-  switch (ah)
-  {
-  case 0x30:  // DOS's version: 5.0 (DOSBox-X's)
-    R.ax = 0x0005;
-    R.bx = R.cx = 0;
-    return true;
-  case 0x09:  // a '$' message
-    if (DEBUG_FILES)
-    {
-      for (u16 k = R.dx; *far_ptr(R.ds, k) != '$'; k++) fputc(*far_ptr(R.ds, k), stderr);
-      fputc('\n', stderr);
-    }
-    return true;
-  case 0x2A:  // the date and the time (time())
-  case 0x2C:
-  {
-    u32 v = host && host->dos ? host->dos(host->ctx, ah) : 0;
-    R.cx = (u16)(v >> 16);
-    R.dx = (u16)v;
-    return true;
-  }
-  case 0x0B:  // a character waiting on the standard input (kbhit())
-    R.ax = (u16)((R.ax & 0xFF00) | ((host && host->dos ? host->dos(host->ctx, ah) : 0) & 0xFF));
-    return true;
-  case 0x25:  // set an interrupt vector (the timer's, Ctrl-Break's: their handlers are the host's)
-    *(u16a *)far_ptr(0, (u16)(al * 4)) = R.dx;
-    *(u16a *)far_ptr(0, (u16)(al * 4 + 2)) = R.ds;
-    return true;
-  case 0x35:  // get one
-    R.bx = *(u16a *)far_ptr(0, (u16)(al * 4));
-    R.es = *(u16a *)far_ptr(0, (u16)(al * 4 + 2));
-    return true;
-  case 0x3D:  // open
-  {
-    char name[80];
-    int k = 0;
-    for (; k < 79 && *far_ptr(R.ds, (u16)(R.dx + k)); k++) name[k] = (char)*far_ptr(R.ds, (u16)(R.dx + k));
-    name[k] = 0;
-    FILE *f = open_game_file(name);
-    if (DEBUG_FILES) fprintf(stderr, "start: open %s -> %s\n", name, f ? "ok" : "not found");
-    if (!f)
-    {
-      dos_error(2);
-      return true;
-    }
-    for (int h = 5; h < 20; h++)
-      if (!files[h])
-      {
-        files[h] = f;
-        R.ax = (u16)h;
-        R.cf = 0;
-        return true;
-      }
-    fclose(f);
-    dos_error(4);
-    return true;
-  }
-  case 0x3E:  // close
-    if (R.bx >= 20 || !files[R.bx])
-    {
-      if (R.bx >= 5) dos_error(6);
-      else R.cf = 0;
-      return true;
-    }
-    fclose(files[R.bx]);
-    files[R.bx] = NULL;
-    R.cf = 0;
-    return true;
-  case 0x3F:  // read
-  {
-    if (R.bx >= 20 || !files[R.bx])
-    {
-      dos_error(6);
-      return true;
-    }
-    u16 k = 0;
-    for (int c; k < R.cx && (c = fgetc(files[R.bx])) != EOF; k++) *far_ptr(R.ds, (u16)(R.dx + k)) = (u8)c;
-    if (DEBUG_FILES) fprintf(stderr, "start: read %d %04X:%04X %u -> %u\n", R.bx, R.ds, R.dx, R.cx, k);
-    R.ax = k;
-    R.cf = 0;
-    return true;
-  }
-  case 0x40:  // write: the console's messages (the tests write no files)
-    if (DEBUG_FILES && R.bx < 5)
-      for (u16 k = 0; k < R.cx; k++) fputc(*far_ptr(R.ds, (u16)(R.dx + k)), stderr);
-    R.ax = R.cx;
-    R.cf = 0;
-    return true;
-  case 0x42:  // seek
-  {
-    if (R.bx >= 20 || !files[R.bx])
-    {
-      dos_error(6);
-      return true;
-    }
-    long pos = (long)(((u32)R.cx << 16) | R.dx);
-    fseek(files[R.bx], pos, al == 0 ? SEEK_SET : al == 1 ? SEEK_CUR : SEEK_END);
-    long now = ftell(files[R.bx]);
-    R.ax = (u16)now;
-    R.dx = (u16)(now >> 16);
-    R.cf = 0;
-    return true;
-  }
-  case 0x44:  // device information: the console for the standard handles, a file on C: for the others
-    if (al == 0x00)
-    {
-      R.dx = R.bx < 5 ? 0x80D3 : 0x0002;
-      R.ax = R.dx;
-      R.cf = 0;
-      return true;
-    }
-    break;
-  case 0x43:  // a file's attributes (the library's open(): read-only or not): an archive
-    if (al == 0x00)
-    {
-      R.cx = 0x20;
-      R.cf = 0;
-      return true;
-    }
-    break;
-  case 0x4C:  // the end
-    st_exit(al);
-    return true;
-  default:
-    break;
-  }
-  return false;
+  static DosHost dh = { NULL, dos_answer, dos_exit, NULL };
+  dh.gameDir = host ? host->gameDir : NULL;
+  dos_attach(&dh);
+  return dos_int21();
 }
