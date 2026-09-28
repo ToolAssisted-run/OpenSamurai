@@ -16,6 +16,7 @@
 #include "rp.h"
 #include "duelexe.h"
 #include "battleexe.h"
+#include "meleeexe.h"
 
 #include <setjmp.h>
 #include <time.h>
@@ -316,6 +317,7 @@ typedef struct
 } KeyJoystick;
 static const KeyJoystick rpKeys = { 0x2E58, 0x0DA8, 0x339A, 0x339B, 0x339C, 0x339D, 0x339E, 0x339F, 0x33A1, 0x33A2, 0x33A3, 0x33A4, 0 };
 static const KeyJoystick duelKeys = { 0x2DB2, 0x0080, 0x22F2, 0x22F3, 0x22F4, 0x22F5, 0x22F6, 0x22F7, 0x22F9, 0x22FA, 0x22FB, 0x22FC, 0x80 };
+static const KeyJoystick meleeKeys = { 0x37B3, 0x00FA, 0x398C, 0x398D, 0x398E, 0x398F, 0x3990, 0x3991, 0x3993, 0x3994, 0x3995, 0x3996, 0 };
 static const KeyJoystick *keyHook;
 static uint16_t keyDs;
 
@@ -578,6 +580,46 @@ static int run_battle(void)
   return duelCode;
 }
 
+// ---------------------------------------------------------------- MELEE.EXE
+
+// the tick counter (DS:53): the timer's callback (1FE7:043E) counts each frame (and DS:46C6-46C9) while its
+// handler is hooked (DS:46AB), the counter only while DS:57 says so; the program reads it as it runs
+static uint16_t melee_ticks(void *ctx, int site)
+{
+  (void)ctx;
+  (void)site;
+  poll(false);
+  return *(uint16_t *)far_ptr(MELEE_DS, 0x53);
+}
+
+static void melee_timer_frame(void)
+{
+  uint8_t *ds = far_ptr(MELEE_DS, 0);
+  if (!ds[0x46AB]) return;
+  for (int k = 0x46C6; k <= 0x46C9; k++) ds[k]++;
+  if (ds[0x57]) (*(uint16_t *)(ds + 0x53))++;
+}
+
+static int run_melee(void)
+{
+  ExeInfo e;
+  if (!program_load("MELEE.EXE", &e)) return -1;
+  static MeleeExeHost mh = { duel_answer, melee_ticks, NULL, duel_exit_, NULL, NULL };
+  mh.gameDir = host->gameDir;
+  g_dsSeg = 0;
+  meleeexe_attach(far_ptr(MELEE_DS, 0), GAME_SHARED_SEG, &mh);
+  keyHook = &meleeKeys;
+  keyDs = MELEE_DS;
+  timerFrame = melee_timer_frame;
+  duelCode = -1;
+  meleeexe_entry(GAME_PSP_SEG, e.ss, e.sp);
+  keyHook = NULL;
+  timerFrame = NULL;
+  dos_close_all();
+  program_end();
+  return duelCode;
+}
+
 // ---------------------------------------------------------------- RP and its sub-games
 
 // RP exits for a sub-game after hibernating (its data segment in the picture buffer): the launcher runs the
@@ -593,7 +635,12 @@ static void rp_subgame(void *ctx, int code)
   int r = 1;
   if (code == 1) r = run_duel();
   else if (code == 2) r = run_battle();
-  else fprintf(stderr, "opensamurai: the melee is not in the reconstruction yet; it is skipped\n");
+  else
+  {
+    r = run_melee();
+    // a melee that turns into a formal duel (shared+28 == 0, +2A == 1: the launcher's rule)
+    if (r != 0 && !shared_w(0x28) && shared_w(0x2A) == 1) r = run_duel();
+  }
   if (r == 0)  // the player quit (Alt-Q)
   {
     exitCode = 0;

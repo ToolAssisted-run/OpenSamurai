@@ -2,7 +2,7 @@
 # replaces (weak defaults) behave as if every source were compiled into the program.
 opensamuraiSources = files(
   'asm2c.c', 'battle.c', 'battle_math.c', 'battle_setup.c', 'battle_tables.c', 'battleexe_core.c', 'battleexe_rt.c', 'catalog.c', 'dos.c', 'dosmem.c', 'dsimage.c', 'duel.c', 'exe.c', 'game.c',
-  'duel_tables.c', 'duelexe_core.c', 'duelexe_rt.c', 'lzw.c', 'melee_core.c', 'melee_rt.c', 'mgraphic.c', 'rp_core.c', 'rp_rt.c', 'shared.c', 'vga.c', 'start_core.c', 'start_rt.c',
+  'duel_tables.c', 'duelexe_core.c', 'duelexe_rt.c', 'lzw.c', 'melee_core.c', 'melee_rt.c', 'meleeexe_core.c', 'meleeexe_rt.c', 'egraphic.c', 'mgraphic.c', 'rp_core.c', 'rp_rt.c', 'shared.c', 'vga.c', 'start_core.c', 'start_rt.c',
 )
 
 opensamuraiIncludes = include_directories('.')

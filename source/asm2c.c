@@ -8,13 +8,14 @@ Regs R;
 bool g_asmCall;
 
 // a divide error: the INT 0 vector (0000:0000) says whose handler runs. The drawing routines of RP and START (their
-// assembly modules; DUEL's) catch the overflows of their slope divisions: their handlers return +-7F00h by the sign of the
+// assembly modules; DUEL's, MELEE's) catch the overflows of their slope divisions: their handlers return +-7F00h by the sign of the
 // dividend and a sign word the faulting division picks, and resume after the division (a 4-byte idiv)
 static const struct { u16 seg, off, ip, wordAt, wordElse; } divHandlers[] = {
   { 0x2E58, 0x0305, 0x0296, 0x2c99, 0x2c97 },  // RP 168c:0305, the lines
   { 0x2E58, 0x04DA, 0x0454, 0x2ca7, 0x2ca5 },  // RP 168c:04DA, the polygons
   { 0x2E60, 0x01BD, 0x014E, 0x1809, 0x1807 },  // START 1694:01BD
   { 0x2CFF, 0x083F, 0x07D0, 0x26AF, 0x26AD },  // DUEL 1533:083F
+  { 0x37B3, 0x0ACB, 0x0A5C, 0x4DF5, 0x4DF3 },  // MELEE 1FE7:0ACB
 };
 void asm_divide_error(u16 ip)
 {
@@ -69,7 +70,18 @@ void asm_int(u8 n)
   u8 ah = (u8)(R.ax >> 8), al = (u8)R.ax;
   if (n == 0x10)
   {
-    if (ah == 0x00) videoMode = al & 0x7F, vga_set_mode(al & 0x7F);
+    if (ah == 0x00)
+    {
+      videoMode = al & 0x7F;
+      vga_set_mode(al & 0x7F);
+      if (vga.planar)  // the BIOS's DAC for the EGA's modes: the 64 colours (rgbRGB: primary 2/3, secondary 1/3)
+        for (int k = 0; k < 64; k++)
+        {
+          asm_dac[k][0] = (u8)(42 * ((k >> 2) & 1) + 21 * ((k >> 5) & 1));
+          asm_dac[k][1] = (u8)(42 * ((k >> 1) & 1) + 21 * ((k >> 4) & 1));
+          asm_dac[k][2] = (u8)(42 * (k & 1) + 21 * ((k >> 3) & 1));
+        }
+    }
     else if (ah == 0x10 && al == 0x00) vga_attribute(R.bx & 0xFF, (u8)(R.bx >> 8));
     else if (ah == 0x10 && al == 0x01) vga_attribute(0x11, (u8)(R.bx >> 8));
     else if (ah == 0x10 && al == 0x02)

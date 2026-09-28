@@ -10,6 +10,7 @@
 #include <strings.h>
 
 #include "asm2c.h"
+#include "exe.h"
 
 static const DosHost *host;
 static FILE *files[20];
@@ -122,6 +123,22 @@ bool dos_int21(void)
   case 0x11:  // find a file (FCB)
     find_fcb();
     return true;
+  case 0x4B:  // an overlay (AL 3): the executable at DS:DX loaded at the parameter block's segment (ES:BX), relocated
+    if (al == 0x03)
+    {
+      char name[80], path[1024];
+      int k = 0;
+      for (; k < 79 && *far_ptr(R.ds, (u16)(R.dx + k)); k++) name[k] = (char)*far_ptr(R.ds, (u16)(R.dx + k));
+      name[k] = 0;
+      ExeInfo e;
+      u16 seg = *(u16a *)far_ptr(R.es, R.bx);
+      bool ok = find_game_file(name, path, sizeof path) && exe_load(path, seg, &e);
+      if (DEBUG_FILES) fprintf(stderr, "dos: overlay %s at %04X -> %s\n", name, seg, ok ? "ok" : "not found");
+      if (!ok) dos_error(2);
+      else R.cf = 0;
+      return true;
+    }
+    break;
   case 0x19:  // the current drive: C:
     R.ax = (u16)((R.ax & 0xFF00) | 2);
     return true;

@@ -144,6 +144,7 @@ dispatch_:
   case 0x0b6f: goto L_0b6f;
   case 0x0bae: goto L_0bae;
   case 0x0bba: goto L_0bba;
+  case 0x0bbf: goto L_0bbf;
   case 0x0bcb: goto L_0bcb;
   case 0x0be2: goto L_0be2;
   case 0x0be7: goto L_0be7;
@@ -157,6 +158,8 @@ dispatch_:
   case 0x0c89: goto L_0c89;
   case 0x0c98: goto L_0c98;
   case 0x0c9d: goto L_0c9d;
+  case 0x0ca1: goto L_0ca1;
+  case 0x0ce6: goto L_0ce6;
   case 0x0d9b: goto L_0d9b;
   case 0x0da5: goto L_0da5;
   case 0x0da9: goto L_0da9;
@@ -1489,8 +1492,8 @@ L_0bae:   R.bp = (u16)(R.di);                                          // 0bae m
   STOSW();                                                     // 0bb1 stosw word ptr es:[di], ax
   R.ax = (u16)(M16(CS, (u16)(0xa64)));                         // 0bb2 mov ax, word ptr cs:[0xa64]
   W16(CS, (u16)(0xa66), R.ax);                                 // 0bb6 mov word ptr cs:[0xa66], ax
-L_0bba:   ASM_INDIRECT_CALL(M16(CS, (u16)(0xa5f))); /* call word ptr cs:[0xa5f] */ // 0bba call word ptr cs:[0xa5f]
-  if (R.zf) goto L_0bcb;                                       // 0bbf je 0xbcb
+L_0bba:   { u16 t_ = M16(CS, (u16)(0xa5f)); PUSH(0x0bbf); ip_ = t_; goto dispatch_; } // 0bba call word ptr cs:[0xa5f]
+L_0bbf:   if (R.zf) goto L_0bcb;                                       // 0bbf je 0xbcb
   W16(CS, (u16)(0xa4e), 0x0);                                  // 0bc1 mov word ptr cs:[0xa4e], 0
   goto L_0be7;                                                 // 0bc8 jmp 0xbe7
 L_0bcb:   SUB16(M16(CS, (u16)(0xa50)), 0x0);                           // 0bcb cmp word ptr cs:[0xa50], 0
@@ -1565,6 +1568,44 @@ L_0c9d:   R.ds = POP();                                                // 0c9d p
   R.si = POP();                                                // 0c9e pop si
   R.bp = POP();                                                // 0c9f pop bp
   ip_ = POP(); cs_ = POP(); R.sp += 0; if (cs_ != 0x4887) return; goto dispatch_; // 0ca0 retf
+L_0ca1:   SETL(R.cx, M8(CS, (u16)(0xa6a)));                            // 0ca1 mov cl, byte ptr cs:[0xa6a]
+  // 0ca6 cli 
+  R.dx = (u16)(0x3ce);                                         // 0ca7 mov dx, 0x3ce
+  R.ax = (u16)(0x4);                                           // 0caa mov ax, 4
+  ASM_PORT_OUT16(R.dx, R.ax);                                  // 0cad out dx, ax
+  R.ax = (u16)(M16(DS, (u16)(R.si)));                          // 0cae mov ax, word ptr [si]
+  R.ax = (u16)(ROL16(R.ax, (u8)R.cx));                         // 0cb0 rol ax, cl
+  SETL(R.bx, (u8)R.ax);                                        // 0cb2 mov bl, al
+  R.dx = (u16)(INC16(R.dx));                                   // 0cb4 inc dx
+  SETL(R.ax, 0x1);                                             // 0cb5 mov al, 1
+  ASM_PORT_OUT(R.dx, (u8)R.ax);                                // 0cb7 out dx, al
+  R.ax = (u16)(M16(DS, (u16)(R.si)));                          // 0cb8 mov ax, word ptr [si]
+  R.ax = (u16)(ROL16(R.ax, (u8)R.cx));                         // 0cba rol ax, cl
+  SETH(R.bx, (u8)R.ax);                                        // 0cbc mov bh, al
+  SETL(R.ax, 0x2);                                             // 0cbe mov al, 2
+  ASM_PORT_OUT(R.dx, (u8)R.ax);                                // 0cc0 out dx, al
+  R.ax = (u16)(M16(DS, (u16)(R.si)));                          // 0cc1 mov ax, word ptr [si]
+  R.ax = (u16)(ROL16(R.ax, (u8)R.cx));                         // 0cc3 rol ax, cl
+  SETH(R.cx, (u8)R.ax);                                        // 0cc5 mov ch, al
+  SETL(R.ax, 0x3);                                             // 0cc7 mov al, 3
+  ASM_PORT_OUT(R.dx, (u8)R.ax);                                // 0cc9 out dx, al
+  R.ax = (u16)(M16(DS, (u16)(R.si)));                          // 0cca mov ax, word ptr [si]
+  R.ax = (u16)(ROL16(R.ax, (u8)R.cx));                         // 0ccc rol ax, cl
+  SETL(R.cx, (u8)(R.cx >> 8));                                 // 0cce mov cl, ch
+  SETH(R.cx, (u8)R.ax);                                        // 0cd0 mov ch, al
+  // 0cd2 sti 
+  R.si = (u16)(INC16(R.si));                                   // 0cd3 inc si
+  SUB16(M16(CS, (u16)(0xa66)), 0x1);                           // 0cd4 cmp word ptr cs:[0xa66], 1
+  if (!R.zf) goto L_0ce6;                                      // 0cda jne 0xce6
+  SETL(R.ax, M8(CS, (u16)(0xa5e)));                            // 0cdc mov al, byte ptr cs:[0xa5e]
+  SETH(R.ax, (u8)R.ax);                                        // 0ce0 mov ah, al
+  R.bx = (u16)(AND16(R.bx, R.ax));                             // 0ce2 and bx, ax
+  R.cx = (u16)(AND16(R.cx, R.ax));                             // 0ce4 and cx, ax
+L_0ce6:   SETL(R.ax, (u8)(R.cx >> 8));                                 // 0ce6 mov al, ch
+  SETL(R.ax, OR8((u8)R.ax, (u8)R.cx));                         // 0ce8 or al, cl
+  SETL(R.ax, OR8((u8)R.ax, (u8)(R.bx >> 8)));                  // 0cea or al, bh
+  SETL(R.ax, OR8((u8)R.ax, (u8)R.bx));                         // 0cec or al, bl
+  ip_ = POP(); R.sp += 0; goto dispatch_;                      // 0cee ret
 L_0d9b:   PUSH(R.bp);                                                  // 0d9b push bp
   R.bp = (u16)(R.sp);                                          // 0d9c mov bp, sp
   PUSH(R.si);                                                  // 0d9e push si

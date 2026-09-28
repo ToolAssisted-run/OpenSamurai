@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "asm2c.h"
+#include "vga.h"
 #include "game.h"
 
 uint8_t *far_ptr(uint16_t seg, uint16_t off);
@@ -152,7 +153,9 @@ static void shot(long n)
   FILE *f = fopen(name, "wb");
   if (!f) return;
   fprintf(f, "P6 320 200 255\n");
+  static uint8_t planar[64000];
   const uint8_t *vram = far_ptr(0xA000, 0);
+  if (vga.planar) vga_render(planar, asm_dac), vram = planar;
   for (int k = 0; k < 64000; k++)
     for (int c = 0; c < 3; c++) fputc(asm_dac[vram[k]][c] << 2 | asm_dac[vram[k]][c] >> 4, f);
   fclose(f);
@@ -188,13 +191,37 @@ static void present(void *ctx)
     keys[keyTail] = (uint16_t)k;
     keyTail = (keyTail + 1) % 64;
   }
-  if (listed(scriptShots, frameCount, NULL)) shot(frameCount);
+  if (listed(scriptShots, frameCount, NULL))
+  {
+    shot(frameCount);
+    if (getenv("OPENSAMURAI_DEBUGVGA"))
+    {
+      unsigned long sum[4] = { 0 };
+      for (int p = 0; p < 4; p++)
+        for (int k = 0; k < 0x10000; k++) sum[p] += vga.plane[p][k] != 0;
+      fprintf(stderr, "frame %ld: mode %02X planar %d start %02X%02X offset %02X planes %lu %lu %lu %lu attr", frameCount, vga.mode, vga.planar, vga.crtc[0xC], vga.crtc[0xD], vga.crtc[0x13], sum[0], sum[1], sum[2], sum[3]);
+      for (int k = 0; k < 21; k++) fprintf(stderr, " %02X", vga.attr[k]);
+      fprintf(stderr, " seq2 %02X gc5 %02X\n", vga.seq[2], vga.gc[5]);
+      static uint8_t img[64000];
+      vga_render(img, asm_dac);
+      int count[256] = { 0 };
+      for (int k = 0; k < 64000; k++) count[img[k]]++;
+      for (int k = 0; k < 256; k++)
+        if (count[k]) fprintf(stderr, "  index %02X: %d pixels, DAC %02X %02X %02X\n", k, count[k], asm_dac[k][0], asm_dac[k][1], asm_dac[k][2]);
+    }
+  }
   if (lastFrame >= 0 && frameCount >= lastFrame) exit(0);
   uint32_t *px;
   int pitch;
   if (!SDL_LockTexture(texture, NULL, (void **)&px, &pitch))
   {
+    static uint8_t planar[64000];
     const uint8_t *vram = far_ptr(0xA000, 0);
+    if (vga.planar)  // the EGA's planar mode (the melee): the planes through the attribute controller
+    {
+      vga_render(planar, asm_dac);
+      vram = planar;
+    }
     for (int y = 0; y < 200; y++)
       for (int x = 0; x < 320; x++)
       {
