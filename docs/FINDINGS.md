@@ -465,6 +465,90 @@ simulations, the four sound drivers): the outputs the same, line for line; the s
 MIDI the same, byte for byte, but the MT-32's sound (Munt's floating point with Windows' and Linux's C libraries:
 0.9% of the samples differ, by an RMS of 1 in 212); a saved game written the same, and restored the same.
 
+### 5.14 The rules, read out of the verified code (the game guide)
+
+Read out of the recompiled programs (which run the captures identically) and the unpacked executables' data
+segments while writing the game guide "Sword of the Samurai: The Hidden Game". Each item says how far it is
+checked: *code* = read from the verified recompilation, with no capture made of the case; *reading* = an
+interpretation of the code, not checked.
+
+Chance (*code*). Every program uses MS C's `rand()` (state × 214013 + 2531011, bits 16-30), each seeded once:
+START and RP from the BIOS ticks (RP once per career, then `rand(3)` (seed & 0xFFF) times), DUEL from `time()`
+(whole seconds), BATTLE from the BIOS ticks, MELEE from `ftime()`'s milliseconds, which DOS counts in hundredths:
+100 seeds. RP's generator state is in its data segment, saved across the fights: the fights do not disturb the
+career's stream.
+
+The crest quiz (*code*). shared+2E = 1 passed, 0 failed. RP sets the reign length DS:812E = 24 or 4; below daimyo
+a countdown steps the reign counter every 15 turns; at length − 6 the lord falls ill, at − 3 worse, at length he
+dies (passed: 270/315/360 turns = 27/31.5/36 years; failed: never/15/60 turns). A rival who succeeds a lord starts
+the counter at 4. The succession (24E2:0004) tests shared+2E first and, when 0, goes to the game-over prompt
+(1568:00E2): no succession, whichever way the lord goes. The rivals' action scores weight the temperament term by
+(length − counter) / length, so it fades six times faster after a failed quiz. A failed quiz also skips the
+province map: START forces Sagami (0x29, 1000:01F4).
+
+Character creation (*code*). Name: at most 20 characters (62 pixels), empty = "Nameless One". Attributes:
+`clamp(DS:0420[age group] + province value + DS:042C[rand(20)], 1, 128)` for swordsmanship (DS:1F64), generalship
+(1F96) and land (1FFA); honor (1FC8) is clamped to 1..96 and then gains DS:0502[heir | female<<1 | hostage<<2]
+(2, 8, 2, 0, 0, 0, 4, 0) for each family member whose holder is the character; troops = clamp(honor × land / 128,
+1, 128). Age groups 15-20 .. 71-80: −32, −16, 0, +16, +32. The roll table: −48 5%, −32 10%, −16 15%, 0 40%,
++16 15%, +32 10%, +48 5%, and for the player (133F:08AE) a negative roll is 0. Every province's values add up to
+256 but Mino (Oda) and Sagami (Hōjō), 272; the 120s are Izu's swordsmanship, Kai's generalship, Totomi's honor,
+Mutsu's land. Difficulty 0..3 starts the score at −70/−40/−10/0 and turns an aggressive rival neutral on Tanto, a
+cautious one neutral on No-Dachi. Temperament by age group (aggressive/neutral/cautious): 50/40/10, 40/40/20,
+30/40/30, 20/40/40, 10/40/50 %. The family advantage adds 32. At rank 1 each rival is rerolled while his score
+is below the player's, and the set is rerolled until the player is fourth; the player's age is then 15.
+
+The duel's opponent (*code*; the practice captures have equal swordsmanship, a bonus of 0). DUEL 1000:0010: skill =
+clamp(2 × shared+36 + bitlength((unsigned)(shared+6A − shared+68) >> 4), 0, 7), where RP puts the player's
+swordsmanship (DS:7CFA) at +68 and the opponent's at +6A (23BB:019E). The shift is `shr`: an opponent weaker by any
+amount gives 0x0FFF, +12, skill 7 at every difficulty; 0-15 stronger +0, 16-31 +1, 32-63 +2, 64-127 +3. The
+aggression bias DS:4DBE = clamp(shared+312 + skill/2 − 1, −1, 0), +312 = the opponent's temperament (0 for someone
+without a record). Opponents: a rival or lord's own swordsmanship; the bold deed's swordsman DS:05FC[difficulty] =
+77/90/102/115; road duellists DS:2360[rank] = 64/80/96 (the series of three: +0, +16, +32); kenjutsu (the player's
+swordsmanship below 96) the player's + 16 with shared+36 lowered by one (not below 0) for the duel. The honor
+reward of bold deeds and road encounters has the same `shr`: bonus = clamp(((DS:05FC or DS:2358[difficulty] (the
+same values) − swordsmanship) >> 4) + 16, 12, 24), half of it gained: a weaker opponent gives the most (24/2 = 12),
+a stronger one 8-11; the lower limit is never reached. The skill's effects (5.1): the reaction delay random(10 −
+2 × skill) frames (0 from skill 5), the wind-up 5 − skill frames (0 from 5), the won't-guard windows
+`DS:1E64[skill/2] & (frame >> 4)` (masks 0x841/0x101/0x001/0: for skill < 6 every odd 16-frame window, and for
+skill 0-1 none of the windows 64-127 (102-205 s), skill 2-3 none from window 256 (410 s)). A parry: the attacker
+holds 4 frames, the defender 2. An over-the-shoulder hack cannot be parried and wounds twice half of the time
+(below 3 wounds). 32 state entries on the bottom line = retreat.
+
+The melee (*code*). Enemy skill DS:355C = clamp(2 × shared+36 + (shared+3C == 5) + (mission == 5) + 2 × (DS:353A
+== 2), 0, 7), but DS:353A (the location type, 2 = village) is read at 1000:0197 and only set at 1000:027B from
+the mission table DS:3452: it still holds the image's 3, and the village's +2 never applies. (shared+3C = 5 as the
+lord's castle: *reading*, from RP's place numbering.) Each guard's class DS:7353 = DS:410E[skill][rand(8)] (the
+rows: s0 all 0; s1 1/8 class 1; s2 3/8; s3 5/8; s4 7/8; s5 6/8 class 1, 2/8 class 2; s6 3/8 class 1, 5/8 class 2;
+s7 5/8 class 2, 3/8 class 3); the player, the tax collector and the rival lord are class 3 (1000:4AE6, 4A1A).
+Wounds per blow DS:235E[class][rand(8 − v)] (rows 1,1,2,2,2,2,2,2 / 1,1,2,2,2,2,2,2 / 1,1,1,1,2,2,2,2 /
+1,1,1,1,1,1,2,2), v = 3 for the player, the victim's class for a guard facing its attacker in a melee exchange,
+else 0: the player always takes one wound; a guard dies of one blow with 75/71/33/0 % (facing) or 75/75/50/25 %
+(not). Attack recovery (DS:2338[class] + DS:2332[weapon] + wounded + DS:233E[class][rand(8)] (+ rand(3) for the
+AI)) × 12 ticks; weapons sword 2, spear 3, bow 6, musket 9, shuriken 1. Arrow hits ((class − 2 × offset) × 20 +
+80) %. Recognition (7 − skill) × 30 + 180 ticks (+60 with the alarm). Guards aim at the player's tile (7 − skill)
+entries back in an 8-entry history. Quotas: g = DS:3446[skill] (10..24) + rand(7), doubled at skill 6-7. The
+reinforcement countdown DS:9D8E counts loop passes, so a faster CPU brings them sooner (*reading*: not measured on
+a real machine). DS:3567 skips the player's wounds; its only write (1000:98D6) clears it: a debug switch that
+cannot be turned on.
+
+The battle (*code*, 5.2 and the workspace's reports/BATTLE.md). The enemy general only chooses the formation; the
+units follow their routes or hold and react to what enters their ranges. Damage v = 4 ± (2 − difficulty) + (men −
+64)/8 + the strength ratio + (morale − 64)/16 + (generalship − 64)/16 + 8 rear / 6 flank + 2 for musketeers >
+cavalry > infantry > musketeers + 4 musketeers within 32 px + the footing in melee (to −16), clamped 0..12, +
+`rand() & 7`, into a table, doubled with fewer than 5 units. A unit mostly in woods is out of the visibility map.
+In a campaign (177D:0688) a defeat (shared+4E) is only message 0x4C; a concession (R) is −32 honor, message 0x3A
+and the desertion check (1568:0818); the men of units that left the field are not losses.
+
+The machines (*code*, and 5.8 for START). The duel (7 frames) and the battle (17 frames) run by the retrace: at
+60 Hz (CGA, EGA, Tandy) 8.6 frames and 3.5 steps a second against VGA's 10 and 4.1 (*reading*: not run at 60 Hz).
+MELEE's retrace check scales by /32 where BATTLE's has /16 ((count × 17/32)/3977 = 2, outside 4..6), so it always
+runs a plain 60 Hz timer. RSOUND's first note-off on each channel sends the setup's leftover byte (BA 69 0A E9 56 FF
+07 CB) as the note; BAh, E9h, FFh and CBh are status bytes (what the MT-32 makes of them: *reading*). RP's Alt-J
+recalibrates the joystick (1CEC:1938, only with shared+34 = 1); READ.ME says it switches it on and off. The real
+game cannot reach the uncalibrated strategic-map hang of 5.12: the setup calibrates whenever it enables the
+joystick.
+
 ## 6. Methods
 
 The oracle is the real game in DOSBox-X headless (Chimera's core with the tracer branch, as for SDLPoP2).
@@ -505,6 +589,9 @@ F-keys not at all; decoded with the workspace's work/jrsrkeys.py.
 - What `SAMURAI.CLK` (3780 bytes) is: no program names it; possibly part of the RawCopy patch.
 
 ## 8. Log
+
+- 2026-09-28: the rules read out of the verified code for the game guide (5.14): the duel's unsigned skill
+  shift, the melee's dead village bonus, the campaign's concession price, the machines' differences.
 
 - 2026-09-28: DUEL, BATTLE and MELEE recompiled whole and verified; the frontend plays the whole game (START, RP,
   the duel, the battle, the melee in the EGA's planar mode), saves included.
