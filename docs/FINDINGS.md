@@ -395,7 +395,10 @@ role-playing game (about 21,500 calls each, 22 sounds and musics) identical.
 
 The game directory's AdLib driver is a later one (AdLibSamurai 1-10-94) than the floppy's (10-25-89); the later one
 is the reconstruction's. It drives an OPL2 at 388h/389h: at its start the chip's test (timer 1 set to FFh and
-started, the status read 200 times: C0h after, 00h before; else AX = 41h), the rhythm mode on (BDh = 20h); each
+started, the status read 200 times: C0h after, 00h before; else AX = 41h; it ends with 04h = 60h, and its "flags
+reset" goes to register 60h instead of 04h, so only the chip's own rule, that a timer's mask bit clears its flag,
+leaves the status 00h for the next start: the captures read 00h before every test, and a model without the rule
+failed START's second test after a new game, "No AdLib sound board found"), the rhythm mode on (BDh = 20h); each
 write is delayed by status reads (30 before the register, 5 before the value). Its tick runs a sequencer of six
 voices on a stack of its own (its data segment's) and asks for the fast rate while a pitch sweep runs; the fast
 tick moves the sweeps. Its voices call routines through [bx+16h] (0310h, 075Bh: roots of the recompilation, with

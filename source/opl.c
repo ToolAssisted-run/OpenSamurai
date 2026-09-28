@@ -210,6 +210,11 @@ bool opl_out(uint16_t port, uint8_t v, uint64_t t)
       for (int k = 0; k < 2; k++)
         if ((v & (1 << k)) && !(timerCtl & (1 << k))) timerStart[k] = t;
       timerCtl = v;
+      // a timer's mask bit also clears its flag (as the chip does): the AdLib driver ends its test with 60h here
+      // and never resets the flags (its next write goes to register 60h), so they stayed set, and its test failed
+      // at its next start (a new game: "No AdLib sound board found")
+      status &= (uint8_t)~(v & 0x60);
+      if (!(status & 0x60)) status &= 0x7F;
     }
   }
   if ((evTail + 1) % EVENTS != evHead)
