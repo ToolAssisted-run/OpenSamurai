@@ -8,7 +8,7 @@ The original game is a chain of separate DOS programs: a setup program, the titl
 
 ## Status
 
-Early. The original programs have been taken apart and the work is documented in [docs/FINDINGS.md](docs/FINDINGS.md). Nothing plays yet.
+The whole game plays: the title, the crest quiz, character creation, the role-playing game, and the duels, battles and melees it leads to, with saved games. Each original program is rebuilt from its machine code and checked against the real game running in an emulator. Sound and the joystick are not in yet. The work is documented in [docs/FINDINGS.md](docs/FINDINGS.md).
 
 ## Building
 
@@ -16,7 +16,13 @@ Early. The original programs have been taken apart and the work is documented in
     meson compile -C build
     meson test -C build
 
-`gameDir` is the folder with `SAMURAI.COM` (or `OLD.COM`) and the `.CAT` files. Without it, the tests that need the game's data are skipped.
+`gameDir` is the folder with `SAMURAI.COM` (or `OLD.COM`) and the `.CAT` files. Without it, the tests that need the game's data are skipped. The game itself (`build/frontend/opensamurai`) needs SDL2.
+
+## Playing
+
+    build/frontend/opensamurai path/to/the/game
+
+Use the files of the original floppy disks: the copy protection (the crest quiz) is part of the game. Saved games are written to the game's folder, as the original does. `/NT` after the folder skips the title.
 
 ## License
 
