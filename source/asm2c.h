@@ -64,6 +64,11 @@ extern bool g_asmCall;
   }
 
 // flags
+// the flags word (pushf, lahf: its low byte) and back (popf, sahf); the interrupts stay enabled (bit 9)
+#define FLAGS16() ((u16)(0x0202 | R.cf | R.pf << 2 | R.af << 4 | R.zf << 6 | R.sf << 7 | R.df << 10 | R.of << 11))
+#define FLAGS8() ((u8)FLAGS16())
+static inline void SETFLAGS8(u8 v) { R.cf = v & 1; R.pf = (v >> 2) & 1; R.af = (v >> 4) & 1; R.zf = (v >> 6) & 1; R.sf = (v >> 7) & 1; }
+static inline void SETFLAGS16(u16 v) { SETFLAGS8((u8)v); R.df = (v >> 10) & 1; R.of = (v >> 11) & 1; }
 static inline bool asm_parity(u8 v)
 {
   v ^= v >> 4;
@@ -146,6 +151,8 @@ void asm_port_out(u16 port, u16 value);
 void asm_int(u8 n);
 void asm_unknown_call(u16 seg, u16 off);
 void asm_bad_switch(void);
+// the interrupts a program's runtime serves (DOS files, the clock, ...): true if it did; asm_int serves the rest
+extern bool (*asm_int_hook)(u8 n);
 void asm_far_call(u16 seg, u16 off);  // a call through a far function pointer (rp_core.c)
 #define ASM_PORT_IN(p) asm_port_in(p)
 #define ASM_PORT_OUT(p, v) asm_port_out(p, v)

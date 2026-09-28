@@ -7,6 +7,7 @@ testPrograms = {
   'battletest' : 'the battle against captures of the real game, step by step',
   'meleetest' : 'the melee against captures of the real game, tick by tick',
   'rptest' : 'the role-playing game against captures of the real game, tick by tick',
+  'starttest' : 'the start-up program against captures of the real game, wait by wait',
   'battlesetuptest' : 'the battlefield, the enemy formation and the armies against captures',
 }
 

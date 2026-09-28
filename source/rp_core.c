@@ -4,6 +4,7 @@
 // segment:offset (Ghidra's segments, code at 1000 = the load segment).
 #include "dsimage.h"
 #include "asm2c.h"
+#include "lzw.h"
 #include "rp_rt.h"
 
 // ---- recompiled bodies
@@ -37581,183 +37582,31 @@ static u16 f_290b_0566(u16 p0, u16 p1, u16 p2)
   ASM_LEAVE(); return (u16)R.ax;
 }
 
-// 2965:0008 FUN_2965_0008  FIX: the picture decoder (a stack-switching coroutine in the original), written in C
-// with the original's state: DS:419A the string table (3 bytes a code: prefix word, last byte), 59A0 the
-// decoder's stack pointer (its stack, DS:59B3-5BB2, holds the bytes of the current string, one word each, as
-// the original pushed them), 59A2 count, 59A4/59A5 run length and byte (RLE escape 0x90), 59A6/59A7 code width
-// and its maximum, 59A8 mask, 59AA next code, 59AC/59AE bit buffer and bits in it, 59AF nibble mode, 59B0 the
-// previous code, 59B2 its first byte; 599A/599C/599E width, height, length. The input is the catalog's stream
-// (DS:7924 read pointer, DS:2CAE end, refilled through the far pointer at DS:7F46).
-static u16 lzw_word(u16 *si)
-{
-  if (*si >= *P16(0x2cae))
-  {
-    // call far [7F46], as the original: a return address on the stack (the callee's retf takes it)
-    u16 sp = R.sp;
-    R.sp = g_sp;
-    PUSH(0x40d7);
-    PUSH(0);
-    asm_far_call(*P16(0x7f48), *P16(0x7f46));
-    R.sp = sp;
-    *si = *P16(0x7924);
-  }
-  u16 w = *P16(*si);
-  *si += 2;
-  return w;
-}
-
-static void lzw_reset_table(void)  // 2965:0157
-{
-  *P8(0x59a6) = 9;
-  *P16(0x59a8) = 0x1ff;
-  *P16(0x59aa) = 0x100;
-  for (u16 k = 0, bx = 0; k < 0x800; k++, bx += 3) *P16(bx + 0x419a) = 0xffff;
-  for (u16 k = 0, bx = 0; k < 0x100; k++, bx += 3) *P8(bx + 0x419c) = (u8)k;
-}
-
-static void lzw_init(void)  // 2965:0119
-{
-  u16 si = *P16(0x7924);
-  *P8(0x59a4) = 0;
-  *P8(0x59a5) = 0;
-  *P16(0x59a0) = 0x5bb3;
-  u16 w = lzw_word(&si);
-  *P16(0x7924) = si;
-  u8 max = (u8)w > 0xb ? 0xb : (u8)w;
-  *P8(0x59a7) = max;
-  *P16(0x59ac) = (u16)((w & 0xff00) | max);
-  *P8(0x59ae) = 8;
-  lzw_reset_table();
-}
-
-// the next byte of the decompressed stream (2965:0209): the string of the next code goes onto the decoder's
-// stack, last byte first, and comes off one byte a call
-static u8 lzw_byte(u16 *si, u16 *dx)
-{
-  u16 sp = *P16(0x59a0);
-  if (sp == 0x5bb3)
-  {
-    u16 bx = *P16(0x59ac);
-    u8 have = *P8(0x59ae);
-    bx >>= (16 - have) & 31;
-    u8 cl = have;
-    while ((i8)cl < (i8)*P8(0x59a6))
-    {
-      u16 w = lzw_word(si);
-      *P16(0x59ac) = w;
-      bx |= (u16)(w << (cl & 31));
-      cl += 0x10;
-    }
-    cl -= *P8(0x59a6);
-    *P8(0x59ae) = cl;
-    u16 code = bx & *P16(0x59a8), cx = code, ax = code;
-    if ((i16)code >= (i16)*dx)
-    {  // KwKwK: the previous string and its first byte
-      cx = *dx;
-      ax = *P16(0x59b0);
-      bx = (u16)((bx & 0xff00) | *P8(0x59b2));
-      sp -= 2; *P16(sp) = bx;
-    }
-    for (;;)
-    {
-      bx = (u16)(ax * 3);
-      ax = *P16(bx + 0x419a);
-      if (ax == 0xffff) break;
-      bx = (u16)((bx & 0xff00) | *P8(bx + 0x419c));
-      sp -= 2; *P16(sp) = bx;
-    }
-    u8 first = *P8(bx + 0x419c);
-    *P8(0x59b2) = first;
-    sp -= 2; *P16(sp) = first;  // push ax: AH = 0 (the prefix was 0xFFFF + 1)
-    bx = (u16)(*dx * 3);
-    *P8(bx + 0x419c) = first;
-    *P16(bx + 0x419a) = *P16(0x59b0);
-    ++*dx;
-    if ((i16)*dx > (i16)*P16(0x59a8))
-    {
-      ++*P8(0x59a6);
-      *P16(0x59a8) = (u16)((*P16(0x59a8) << 1) | 1);
-    }
-    if ((i8)*P8(0x59a6) > (i8)*P8(0x59a7)) { lzw_reset_table(); *dx = *P16(0x59aa); }
-    *P16(0x59b0) = cx;
-  }
-  u8 b = *P8(sp);
-  *P16(0x59a0) = (u16)(sp + 2);
-  return b;
-}
-
-// decodes n bytes (2965:018d) to far memory (dst = offset, segment), RLE and nibbles as the flags say
-static void lzw_decode(u16 dstoff, u16 dstseg, u16 n)
-{
-  u16 si = *P16(0x7924);
-  if (*P8(0x59af)) n = (u16)((n + 1) >> 1);
-  *P16(0x59a2) = n;
-  u16 dx = *P16(0x59aa);
-  do
-  {
-    u8 al;
-    if (*P8(0x59a4) == 0)
-    {
-      al = lzw_byte(&si, &dx);
-      if (al != 0x90) *P8(0x59a5) = al;
-      else
-      {
-        al = lzw_byte(&si, &dx);
-        if (al == 0) { al = 0x90; *P8(0x59a5) = al; }
-        else { *P8(0x59a4) = (u8)(al - 1); al = *P8(0x59a5); --*P8(0x59a4); }
-      }
-    }
-    else
-    {
-      al = *P8(0x59a5);
-      --*P8(0x59a4);
-    }
-    if (*P8(0x59af))
-    {
-      *far_ptr(dstseg, dstoff) = al & 0xf;
-      *far_ptr(dstseg, (u16)(dstoff + 1)) = al >> 4;
-      dstoff += 2;
-    }
-    else *far_ptr(dstseg, dstoff++) = al;
-  } while (--*P16(0x59a2) != 0);
-  *P16(0x59aa) = dx;
-  *P16(0x7924) = si;
-}
-
-// PicHeader: flags (bit 0 nibbles, bit 3 a 16-byte palette, bit 4 a 128-byte one: to graphics slot 25), width,
-// height; then the decoder starts
+// 2965:0008 FUN_2965_0008  FIX: the picture decoder (a stack-switching coroutine in the original), in C: lzw.c,
+// with the original's state: DS:419A the string table, 59A0-59B2 the decoder's variables, its stack DS:59B3-5BB2,
+// 599A/599C/599E width, height, length; the input is the catalog's stream (DS:7924 read pointer, DS:2CAE end,
+// refilled through the far pointer at DS:7F46)
+static void rp_lzw_palette(u16 at) { rp_drv(25, 0, at); }
+static const LzwLayout rpLzw = { 0x419a, 0x59a0, 0x5bb3, 0x59a2, 0x59a4, 0x59a6, 0x59a8, 0x59aa, 0x59ac, 0x59af, 0x59b0,
+                                 0x599a, 0x7924, 0x2cae, 0x7f46, 0x40d7, rp_lzw_palette, asm_far_call };
 static u16 f_2965_0008(void)
 {
   FN(0x29650008);
-  u16 si = *P16(0x7924);
-  u16 flags = lzw_word(&si);
-  *P8(0x59af) = flags & 1;
-  *P16(0x599a) = lzw_word(&si);
-  *P16(0x599c) = lzw_word(&si);
-  *P16(0x7924) = si;
-  if (flags & 0x8) { rp_drv(25, 0, si); *P16(0x7924) = (u16)(si + 0x10); }
-  else if (flags & 0x10) { rp_drv(25, 0, si); *P16(0x7924) = (u16)(si + 0x80); }
-  lzw_init();
-  return *P16(0x599c);
+  return lzw_pic_header(&rpLzw);
 }
 
-// 2965:0098 FUN_2965_0098  FIX: DatHeader (see 2965:0008): flags (bit 0 nibbles), length; the decoder starts
+// 2965:0098 FUN_2965_0098  FIX: DatHeader (see 2965:0008)
 static u16 f_2965_0098(void)
 {
   FN(0x29650098);
-  u16 si = *P16(0x7924);
-  *P8(0x59af) = lzw_word(&si) & 1;
-  *P16(0x599e) = lzw_word(&si);
-  *P16(0x7924) = si;
-  lzw_init();
-  return *P16(0x599e);
+  return lzw_dat_header(&rpLzw);
 }
 
 // 2965:00E0 FUN_2965_00e0  FIX: decode n bytes to dst (offset, segment) (see 2965:0008)
 static u16 f_2965_00e0(u16 dstoff, u16 dstseg, u16 n)
 {
   FN(0x296500E0);
-  lzw_decode(dstoff, dstseg, n);
+  lzw_decode(&rpLzw, dstoff, dstseg, n);
   return 0;
 }
 
@@ -37765,7 +37614,7 @@ static u16 f_2965_00e0(u16 dstoff, u16 dstseg, u16 n)
 static u16 f_2965_00fa(u16 dst)
 {
   FN(0x296500FA);
-  lzw_decode(dst, g_dsSeg, *P16(0x599a));
+  lzw_decode(&rpLzw, dst, g_dsSeg, *P16(0x599a));
   return 0;
 }
 

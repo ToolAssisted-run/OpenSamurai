@@ -1,10 +1,12 @@
 #include "asm2c.h"
 
-// MG: the whole module as one function: calls push their return addresses as the original's,
+// MG: each code segment as one function: calls push their return addresses as the original's,
 // returns jump through the dispatch below (so the routines that pop their own return address, or jump
-// into another one's epilogue, work); a return out of the module (far, to another segment) leaves
+// into another one's epilogue, work); a far return to another segment leaves the function
 
-static void mg_run(u16 entry)
+void mg_0000_run(u16 entry);
+
+void mg_0000_run(u16 entry)
 {
   u16 ip_ = entry, cs_ = 0;
   (void)cs_;
@@ -1534,5 +1536,5 @@ L_0d40:   ip_ = POP(); cs_ = POP(); R.sp += 0; if (cs_ != 0x19bd) return; goto d
 void mg_slot(int slot)
 {
   static const u16 entries[] = { 0x0282, 0x0268, 0x074c, 0x0092, 0x0132, 0x0b0e, 0x04cf, 0x07b2, 0x0612, 0x02a4, 0x0408, 0x0b5f, 0x0d40, 0x0abe, 0x0238, 0x0112, 0x05e6, 0x01b6, 0x04ec, 0x0b88, 0x07a3, 0x02f0, 0x030a, 0x0272, 0x00e6, 0x01b4, 0x0955, 0x03de, 0x0887, 0x0699, 0x06b6, 0x0633, 0x04a3, 0x02bd, 0x0324, 0x01e4, 0x01b5, 0x01ae, 0x035c, 0x0ba2, 0x0bb1, 0x0c8a, 0x0bf3, 0x0c44, 0x025a, 0x0243, 0x055c, 0x095f };
-  if (slot >= 0 && slot < 48) mg_run(entries[slot - 0]);
+  if (slot >= 0 && slot < 48) mg_0000_run(entries[slot - 0]);
 }

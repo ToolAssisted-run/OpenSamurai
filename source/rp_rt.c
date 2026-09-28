@@ -13,6 +13,7 @@
 #include "rp.h"
 #include "rp_rt.h"
 #include "asm2c.h"
+#include "dosmem.h"
 
 // the host's C library below (rp_rt.h maps the program's library names to the rp_ functions defined here)
 #undef exit
@@ -58,6 +59,7 @@ void rp_attach(uint8_t *ds, uint16_t dsSeg, uint16_t sharedSeg, const RpHost *h)
   g_dsSeg = dsSeg;
   g_sharedSeg = sharedSeg;
   host = h;
+  asm_int_hook = NULL;
 }
 
 // ---------------------------------------------------------------- strings and memory (near: data segment offsets)
@@ -117,14 +119,12 @@ void rp_delay_frames(int n)
 // exit: 1-3 after the hibernation (23bb:0222) start a sub-game; RP then runs again and restores itself
 // (RestoreContext), which here is: the sub-game, the saved data segment back, and on after SaveContext
 static u16 contextSeg;
-static void free_owner(u16 owner);
-static u16 largest_free(void);
 void rp_exit(i16 code)
 {
   if (code >= 1 && code <= 3 && rp_resumeArmed && host && host->subgame)
   {
     host->subgame(host->ctx, code);
-    free_owner(RP_PSP);  // RP ended (DOS freed its blocks) and runs again (it allocates them anew)
+    dos_free_owner(RP_PSP);  // RP ended (DOS freed its blocks) and runs again (it allocates them anew)
     RestoreContext(contextSeg);
     longjmp(rp_resume, 1);
   }
@@ -266,141 +266,13 @@ i16 rp_write(i16 h, i16 buf, u16 n) { (void)h; (void)buf; return (i16)n; }
 i16 rp_unlink(i16 name) { (void)name; return 0; }
 void rp_perror(i16 s) { fprintf(stderr, "rp: %s\n", NEAR((u16)s)); }
 
-// ---------------------------------------------------------------- DOS memory: the arena, first fit
+// ---------------------------------------------------------------- DOS memory: the arena (dosmem.c)
 
-typedef struct { u16 seg, size; bool used; u16 owner; } Mcb;  // seg = the block's paragraph (the MCB is the one before)
-static Mcb arena[256];
-static int nArena;
-
-void rp_set_arena(uint16_t first, uint16_t end)
-{
-  nArena = 1;
-  arena[0] = (Mcb){ (u16)(first + 1), (u16)(end - first - 1), false };
-}
-
-// the arena as DOS has it in memory: the chain of memory control blocks ('M'/'Z', owner, paragraphs) from the
-// first one at or above paragraph `from` that chains consistently to the last ('Z') below `to`
-void rp_arena_from_memory(uint16_t from, uint16_t to)
-{
-  for (u32 p = from; p < to; p++)
-  {
-    u32 q = p;
-    int n = 0, ok = 0;
-    Mcb tmp[256];
-    while (q < to && n < 256)
-    {
-      u8 *m = far_ptr((u16)q, 0);
-      if (m[0] != 'M' && m[0] != 'Z') break;
-      u16 owner = (u16)(m[1] | (m[2] << 8)), size = (u16)(m[3] | (m[4] << 8));
-      tmp[n++] = (Mcb){ (u16)(q + 1), size, owner != 0, owner };
-      if (m[0] == 'Z') { ok = n >= 2; break; }
-      q += 1u + size;
-    }
-    if (ok)
-    {
-      memcpy(arena, tmp, sizeof(Mcb) * (size_t)n);
-      nArena = n;
-      return;
-    }
-  }
-}
-
-static void merge_free(void)
-{
-  for (int k = 0; k + 1 < nArena; k++)
-    if (!arena[k].used && !arena[k + 1].used)
-    {
-      arena[k].size = (u16)(arena[k].size + 1 + arena[k + 1].size);
-      memmove(&arena[k + 1], &arena[k + 2], sizeof(Mcb) * (size_t)(nArena - k - 2));
-      nArena--;
-      k--;
-    }
-}
-
-u16 rp_dos_alloc(u16 paragraphs)
-{
-  merge_free();
-  for (int k = 0; k < nArena; k++)
-    if (!arena[k].used && arena[k].size >= paragraphs)
-    {
-      if (arena[k].size > paragraphs)
-      {
-        memmove(&arena[k + 2], &arena[k + 1], sizeof(Mcb) * (size_t)(nArena - k - 1));
-        nArena++;
-        arena[k + 1] = (Mcb){ (u16)(arena[k].seg + paragraphs + 1), (u16)(arena[k].size - paragraphs - 1), false };
-        arena[k].size = paragraphs;
-      }
-      arena[k].used = true;
-      arena[k].owner = RP_PSP;
-      return arena[k].seg;
-    }
-  return 0;
-}
-
-// the program ends: DOS frees its blocks
-static void free_owner(u16 owner)
-{
-  for (int k = 0; k < nArena; k++)
-    if (arena[k].used && arena[k].owner == owner) arena[k].used = false;
-  merge_free();
-}
-
-void rp_dos_free(u16 seg)
-{
-  for (int k = 0; k < nArena; k++)
-    if (arena[k].seg == seg) arena[k].used = false;
-}
-
-bool rp_dos_resize(u16 seg, u16 paragraphs)
-{
-  merge_free();
-  for (int k = 0; k < nArena; k++)
-    if (arena[k].seg == seg)
-    {
-      if (paragraphs <= arena[k].size)
-      {
-        if (paragraphs < arena[k].size)
-        {
-          memmove(&arena[k + 2], &arena[k + 1], sizeof(Mcb) * (size_t)(nArena - k - 1));
-          nArena++;
-          arena[k + 1] = (Mcb){ (u16)(seg + paragraphs + 1), (u16)(arena[k].size - paragraphs - 1), false };
-          arena[k].size = paragraphs;
-          merge_free();
-        }
-        return true;
-      }
-      if (k + 1 < nArena && !arena[k + 1].used && arena[k].size + 1 + arena[k + 1].size >= paragraphs)
-      {
-        arena[k].size = (u16)(arena[k].size + 1 + arena[k + 1].size);
-        memmove(&arena[k + 1], &arena[k + 2], sizeof(Mcb) * (size_t)(nArena - k - 2));
-        nArena--;
-        return rp_dos_resize(seg, paragraphs);
-      }
-      return false;
-    }
-  return false;
-}
-
-// DOS memory for recompiled code (INT 21h 48h/49h/4Ah)
-u16 asm2c_dos_alloc(u16 paragraphs, u16 *largest)
-{
-  u16 seg = rp_dos_alloc(paragraphs);
-  if (!seg) *largest = largest_free();
-  return seg;
-}
-
-bool asm2c_dos_free(u16 seg)
-{
-  rp_dos_free(seg);
-  return true;
-}
-
-bool asm2c_dos_resize(u16 seg, u16 paragraphs, u16 *largest)
-{
-  if (rp_dos_resize(seg, paragraphs)) return true;
-  *largest = largest_free();
-  return false;
-}
+void rp_set_arena(uint16_t first, uint16_t end) { dos_set_arena(first, end); }
+void rp_arena_from_memory(uint16_t from, uint16_t to) { dos_arena_from_memory(from, to); }
+u16 rp_dos_alloc(u16 paragraphs) { return dos_alloc(paragraphs); }
+void rp_dos_free(u16 seg) { dos_free(seg); }
+bool rp_dos_resize(u16 seg, u16 paragraphs) { return dos_resize(seg, paragraphs); }
 
 void rp_fatal_memory(i16 name, i16 suffix)
 {
@@ -468,13 +340,6 @@ static int char_width(int font, int ch)
   return h[-9 - (last - first) + (ch - first)] + h[-3];
 }
 
-static u16 largest_free(void)
-{
-  u16 best = 0;
-  for (int k = 0; k < nArena; k++)
-    if (!arena[k].used && arena[k].size > best) best = arena[k].size;
-  return best;
-}
 
 // a driver call from recompiled code: the stub's far jump, with the caller's return address on the stack --
 // the graphics driver (MGRAPHIC, recompiled whole: mgraphic.c) or the host's keyboard and sound
@@ -515,7 +380,7 @@ u16 rp_drv(int slot, ...)
   case 0:  // page_alloc(n): 0 the screen, else a 64000-byte page from DOS
     return a[0] == 0 ? 0xA000 : rp_dos_alloc(0xFA0);
   case 1:  // the largest free DOS block, paragraphs
-    return largest_free();
+    return dos_largest_free();
   case 5:  // char_width(font, ch)
     return (u16)char_width(a[0], a[1] & 0xFF);
   case 11:  // line_height(font)

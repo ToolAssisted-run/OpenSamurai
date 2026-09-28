@@ -7,20 +7,25 @@
 Regs R;
 bool g_asmCall;
 
-// a divide error: the INT 0 vector (0000:0000) says whose handler runs. RP's drawing routines (the assembly
-// module) catch the overflows of their slope divisions: their handlers (168c:0305 lines, 168c:04DA polygons, at the
-// loaded segment 2E58) return +-7F00h by the sign of the dividend and a sign word the faulting division picks
+// a divide error: the INT 0 vector (0000:0000) says whose handler runs. The drawing routines of RP and START (their
+// assembly modules) catch the overflows of their slope divisions: their handlers return +-7F00h by the sign of the
+// dividend and a sign word the faulting division picks, and resume after the division (a 4-byte idiv)
+static const struct { u16 seg, off, ip, wordAt, wordElse; } divHandlers[] = {
+  { 0x2E58, 0x0305, 0x0296, 0x2c99, 0x2c97 },  // RP 168c:0305, the lines
+  { 0x2E58, 0x04DA, 0x0454, 0x2ca7, 0x2ca5 },  // RP 168c:04DA, the polygons
+  { 0x2E60, 0x01BD, 0x014E, 0x1809, 0x1807 },  // START 1694:01BD
+};
 void asm_divide_error(u16 ip)
 {
   u16 off = *(u16a *)far_ptr(0, 0), seg = *(u16a *)far_ptr(0, 2);
-  if (seg == 0x2E58 && (off == 0x0305 || off == 0x04DA))
-  {
-    u16 w = off == 0x0305 ? (ip == 0x0296 ? *P16(0x2c99) : *P16(0x2c97)) : (ip == 0x0454 ? *P16(0x2ca7) : *P16(0x2ca5));
-    u16 d = R.dx ^ w;
-    R.ax = (d & 0x8000) ? (u16)-0x7F00 : 0x7F00;
-    R.dx = 0;
-    return;
-  }
+  for (unsigned k = 0; k < sizeof divHandlers / sizeof *divHandlers; k++)
+    if (divHandlers[k].seg == seg && divHandlers[k].off == off)
+    {
+      u16 w = *P16(ip == divHandlers[k].ip ? divHandlers[k].wordAt : divHandlers[k].wordElse);
+      R.ax = ((R.dx ^ w) & 0x8000) ? (u16)-0x7F00 : 0x7F00;
+      R.dx = 0;
+      return;
+    }
   fprintf(stderr, "asm2c: divide error at %04X (no handler)\n", ip);
   abort();
 }
@@ -52,8 +57,10 @@ u16 asm2c_dos_alloc(u16 paragraphs, u16 *largest);
 bool asm2c_dos_free(u16 seg);
 bool asm2c_dos_resize(u16 seg, u16 paragraphs, u16 *largest);
 static u8 videoMode = 3;
+bool (*asm_int_hook)(u8 n);
 void asm_int(u8 n)
 {
+  if (asm_int_hook && asm_int_hook(n)) return;
   u8 ah = (u8)(R.ax >> 8), al = (u8)R.ax;
   if (n == 0x10)
   {

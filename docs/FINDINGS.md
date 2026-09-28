@@ -220,7 +220,7 @@ to replace the recompiled code function by function where the captures still pas
 Not recompiled: the MS C run-time library (strings, long arithmetic, rand at DS:34FC, files on the game
 directory, DOS memory as DOS's own first-fit arena so that buffers get the segments they got in the real game),
 the picture decoder (2965, a stack-switching coroutine: written in C with the original's state in the data
-segment), AllocBuffer and friends (29fd), the delay (29f7:0048). The graphics driver (MGRAPHIC.EXE) is
+segment, source/lzw.c, which START shares), AllocBuffer and friends (29fd), the delay (29f7:0048). The graphics driver (MGRAPHIC.EXE) is
 recompiled whole, as one function with a dispatch for returns (its routines pop their own return addresses and
 jump into each other's epilogues): source/mgraphic.c, over its own segments, as loaded in the oracle.
 
@@ -230,6 +230,40 @@ the interrupt handlers keep) and srand() in execution order, which the C must as
 captures are driven by random menu keys from a new game (the workspace's oracle/gen_rp.py). Divergences are found
 by comparing the functions entered and the events served with the real game's instruction trace, filtered
 through a FIFO (oracle/rtrace.sh).
+
+### 5.5 The start-up program (START.EXE) — recompiled in source/start_core.c, verification in progress
+
+START is the floppy's program (445.03), with its copy protection: the crest quiz runs while shared+0x2E is 0
+(the provided game directory has a cracked START.EXE that sets the flag and skips it; the floppy prevails).
+A small-model program with two assembly modules linked in (1694 drawing, timer and Ctrl-Break helpers; 1757 the
+picture decoder) and the MS C 5.1 library. It is **recompiled whole from its machine code**, the library too
+(the workspace's work/start_rec.sh; the generated source is not edited): time() runs the library's own code over
+DOS's date and time, so its time-zone state in the data segment is the original's. Kept in C (source/start_rt.c):
+the picture decoder (source/lzw.c, with START's offsets), int86() (it builds its INT instruction on the stack and
+calls it), exit(). Not recompiled: the divide-error handler 1694:01BD (asm_divide_error emulates it, as RP's)
+and the interrupt handlers (INT 8, the frame timer; INT 1Bh, Ctrl-Break): the host gives their effects.
+
+- setjmp()/longjmp() (the title's skip: a key during any wait ends the whole sequence) stay recompiled, so that
+  the jump buffer in the data segment is the original's; the host's setjmp at the call site and longjmp after
+  the recompiled one take the C back into the function that called setjmp.
+- The frame waits: three loops poll the frame counter DS:1BA8 that the timer's handler increments (1000:199B
+  the province map, 24A8 menu_select, 4E46 wait_ticks); those polls ask the host, which sets the handler's bytes
+  DS:1BA8-1BC7 as they were when the real wait ended. Code that reads DS:1BAA between the polls (the menu
+  pointer's blink) sees the value of the last wait.
+- MISC's answers (slot 90 key waiting, 91 the key, 95-97 the joystick), DOS's clock (INT 21h 2Ah/2Ch) and the
+  BIOS ticks (INT 1Ah: the seed) come from the host; DOS's files (3Dh-42h, 44h) from the game directory, DOS's
+  memory from the arena (source/dosmem.c, shared with RP).
+- 1000:04A1 is both the return point of flush_keys' key read (049C) and flush_keys' entry (and its first jump's
+  target): a capture's probe there is a key read only after a "key waiting" answer at 04A6.
+
+Verification: tests/starttest.c runs START from main (its state captured there: the data segment, the shared
+block, all of conventional memory) to exit() on a capture's answers, and compares the data segment and the shared
+block at every frame wait's end and at exit(). Each kind of answer is a queue of its own; a run of equal answers
+carries the number of frame waits before it, so an answer the C takes at another frame is reported where it
+happens. Excluded from the comparison: the stack (DS:4F90-578F: the uninitialized locals hold what the timer
+interrupt pushed there in the real game) and the picture decoder's private stack. Captures: the workspace's
+oracle/gen_start.py, st_ev.py, cap_start.sh (random menu keys, letters and digits from the setup on, on a disk
+built from the floppy's files).
 
 ## 6. Methods
 
@@ -272,6 +306,7 @@ F-keys not at all; decoded with the workspace's work/jrsrkeys.py.
 
 ## 8. Log
 
+- 2026-09-28: START recompiled whole (the library too) and run from main against a capture: 2483 frame waits equal.
 - 2026-09-27: the melee translated over its data segment and corrected until it matched its captures.
 - 2026-09-27: the battle's simulation reconstructed and verified against 96 captures (63,535 steps).
 - 2026-09-27: the duel's simulation reconstructed and verified against 64 captures (211 duels).
