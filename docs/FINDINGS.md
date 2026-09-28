@@ -421,9 +421,9 @@ the tick for musics 0 and 5 (0x09C1). Its note table (DS:2816, a byte a channel)
 memory the launcher leaves as it was (the setup program's leftovers: in the real game BA 69 0A E9 56 FF 07 CB): the
 first note off on a channel sends that byte as the note (E9h: not even a data byte). The reconstruction's memory
 there is zeros: its first note offs are of note 0. source/mpu401.c models the interface; the MIDI goes to the host
-(GameHost.midi) with its time, and the frontend plays it through Munt's libmt32emu when it was built with it (an
-optional dependency, not part of the project; the ROMs from the game's folder or OPENSAMURAI_MT32ROMS), mixed with
-the rest in stereo; OPENSAMURAI_MIDI writes it to a MIDI file. The game's first SysEx writes "Sword of the Samurai"
+(GameHost.midi) with its time, and the frontend plays it through Munt's libmt32emu (the extern/munt submodule, built
+and linked in; the player's ROMs, recognized by their contents, from OPENSAMURAI_MT32ROMS, the user's data folder,
+the program's roms folder or the game's), mixed with the rest in stereo; OPENSAMURAI_MIDI writes it to a MIDI file. The game's first SysEx writes "Sword of the Samurai"
 on the MT-32's display. Verification: tests/soundtest.c on 8 captures of the role-playing game (about 21,400 calls each), the
 driver's memory past its image as the real game's (MEM=, a dump of the oracle's memory before the driver starts):
 identical.

@@ -16,3 +16,9 @@ option('oracleTests',
   value : false,
   description : 'Register the oracle comparison suites (need the captures in $SOTS_WORKSPACE/oracle, default ~/sotsdec)',
 )
+
+option('mt32',
+  type : 'feature',
+  value : 'auto',
+  description : 'The MT-32 sound (Munt\'s libmt32emu: from the extern/munt submodule, else an installed one)',
+)

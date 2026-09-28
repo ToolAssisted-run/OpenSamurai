@@ -2,6 +2,7 @@
 // palette), 70 frames a second as on the VGA; the keyboard gives the BIOS's keys.
 #include <SDL.h>
 #include <ctype.h>
+#include <dirent.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +23,7 @@ static int keyHead, keyTail;
 // for scripted runs: OPENSAMURAI_KEYS="FRAME:KEY ..." (KEY hexadecimal, the BIOS's), OPENSAMURAI_SHOTS="FRAME ..."
 // (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting;
 // OPENSAMURAI_WAV=FILE: the sound written to a WAV file; OPENSAMURAI_MIDI=FILE: the MT-32's MIDI to a MIDI file;
-// OPENSAMURAI_MT32ROMS=DIR: the MT-32's ROMs (else the game's directory)
+// OPENSAMURAI_MT32ROMS=DIR: the MT-32's ROMs (else the user's data folder's roms, the program's, the game's folder)
 static long frameCount, lastFrame = -1;
 static const char *scriptKeys, *scriptShots, *scriptScans;
 // OPENSAMURAI_SCANS="FRAME:+SS FRAME:-SS ..." (SS the PC's scan code, hexadecimal; +e/-e for the grey keys): the
@@ -310,8 +311,8 @@ static void wav_header(uint32_t n)
 }
 
 #ifdef HAVE_MT32EMU
-// the MT-32 (Munt's libmt32emu, when the build found it): its ROMs from OPENSAMURAI_MT32ROMS (a directory), else the
-// game's; the MIDI at its time, rendered with the game's sound
+// the MT-32 (Munt's libmt32emu, built in from extern/munt): its ROMs the user's (see mt32_open); the MIDI at its
+// time, rendered with the game's sound
 #define MT32EMU_API_TYPE 1
 #include <mt32emu.h>
 static mt32emu_context mt32;
@@ -331,27 +332,63 @@ static void MT32EMU_C_CALL mt32_lcd(void *data, const char *message)
   fprintf(stderr, "opensamurai: the MT-32's display: %s\n", message);
 }
 static const mt32emu_report_handler_i_v0 mt32Reports = { mt32_version, mt32_debug, NULL, NULL, mt32_lcd };
-static bool mt32_open(const char *dir)
+// the ROMs: every file of a directory tried for each machine in turn (the MT-32s of 1987-89 first, whose sound the
+// game was made for; then the later MT-32s and the CM-32L); the first machine whose control and PCM ROMs are there
+static bool mt32_try(const char *dir)
 {
-  static const char *controls[] = { "MT32_CONTROL.ROM", "mt32_ctrl_1_07.rom", "mt32_ctrl_1_06.rom", "mt32_ctrl_1_05.rom", "mt32_ctrl_1_04.rom", "CM32L_CONTROL.ROM" };
-  static const char *pcms[] = { "MT32_PCM.ROM", "mt32_pcm.rom", "CM32L_PCM.ROM" };
+  static const char *machines[] = { "mt32_1_07", "mt32_1_06", "mt32_1_05", "mt32_1_04", "mt32_bluer", "mt32_2_07",
+                                    "mt32_2_06", "mt32_2_04", "mt32_2_03", "cm32l_1_02", "cm32l_1_00", "cm32ln_1_00" };
+  DIR *d = opendir(dir);
+  if (!d) return false;
+  char names[64][256];
+  int n = 0;
+  for (struct dirent *e; (e = readdir(d)) && n < 64;)
+    if (e->d_name[0] != '.') snprintf(names[n++], sizeof names[0], "%s", e->d_name);
+  closedir(d);
   mt32emu_report_handler_i reports = { &mt32Reports };
-  mt32 = mt32emu_create_context(reports, NULL);
-  char path[1024];
-  bool control = false, pcm = false;
-  for (unsigned k = 0; k < sizeof controls / sizeof *controls && !control; k++)
-    snprintf(path, sizeof path, "%s/%s", dir, controls[k]), control = mt32emu_add_rom_file(mt32, path) > 0;
-  for (unsigned k = 0; k < sizeof pcms / sizeof *pcms && !pcm; k++)
-    snprintf(path, sizeof path, "%s/%s", dir, pcms[k]), pcm = mt32emu_add_rom_file(mt32, path) > 0;
-  mt32emu_set_stereo_output_samplerate(mt32, 44100);
-  if (!control || !pcm || mt32emu_open_synth(mt32) != MT32EMU_RC_OK)
+  for (unsigned m = 0; m < sizeof machines / sizeof *machines; m++)
   {
-    fprintf(stderr, "opensamurai: no MT-32 ROMs (MT32_CONTROL.ROM, MT32_PCM.ROM) in %s: its music is not heard\n", dir);
+    mt32 = mt32emu_create_context(reports, NULL);
+    bool control = false, pcm = false;
+    char path[5000];
+    for (int k = 0; k < n; k++)
+    {
+      int w = snprintf(path, sizeof path, "%s/%s", dir, names[k]);
+      if (w < 0 || w >= (int)sizeof path) continue;
+      mt32emu_return_code rc = mt32emu_add_machine_rom_file(mt32, machines[m], path);
+      if (rc == MT32EMU_RC_ADDED_CONTROL_ROM) control = true;
+      if (rc == MT32EMU_RC_ADDED_PCM_ROM) pcm = true;
+    }
+    mt32emu_set_stereo_output_samplerate(mt32, 44100);
+    if (control && pcm && mt32emu_open_synth(mt32) == MT32EMU_RC_OK)
+    {
+      fprintf(stderr, "opensamurai: the MT-32 (%s) from %s\n", machines[m], dir);
+      return true;
+    }
     mt32emu_free_context(mt32);
     mt32 = NULL;
-    return false;
   }
-  return true;
+  return false;
+}
+
+// where the ROMs are looked for: OPENSAMURAI_MT32ROMS, the user's data folder's roms (SDL's: on Linux
+// ~/.local/share/OpenSamurai/roms), the roms folder next to the program, the game's folder
+static bool mt32_open(const char *gameDir)
+{
+  char dirs[4][1024];
+  int n = 0;
+  if (getenv("OPENSAMURAI_MT32ROMS")) snprintf(dirs[n++], sizeof dirs[0], "%s", getenv("OPENSAMURAI_MT32ROMS"));
+  char *pref = SDL_GetPrefPath("", "OpenSamurai");
+  if (pref) snprintf(dirs[n++], sizeof dirs[0], "%sroms", pref), SDL_free(pref);
+  char *base = SDL_GetBasePath();
+  if (base) snprintf(dirs[n++], sizeof dirs[0], "%sroms", base), SDL_free(base);
+  snprintf(dirs[n++], sizeof dirs[0], "%s", gameDir);
+  for (int k = 0; k < n; k++)
+    if (mt32_try(dirs[k])) return true;
+  fprintf(stderr, "opensamurai: no MT-32 ROMs (a control ROM and a PCM ROM, any names) in:\n");
+  for (int k = 0; k < n; k++) fprintf(stderr, "  %s\n", dirs[k]);
+  fprintf(stderr, "opensamurai: the AdLib's sound instead\n");
+  return false;
 }
 #endif
 
@@ -473,9 +510,9 @@ int main(int argc, char **argv)
   }
   if (getenv("OPENSAMURAI_MIDI")) midiFile = fopen(getenv("OPENSAMURAI_MIDI"), "wb");
 #ifdef HAVE_MT32EMU
-  if (host.sound == 'R') mt32_open(getenv("OPENSAMURAI_MT32ROMS") ? getenv("OPENSAMURAI_MT32ROMS") : argv[1]);
+  if (host.sound == 'R' && !mt32_open(argv[1])) host.sound = 'A';
 #else
-  if (host.sound == 'R') fprintf(stderr, "opensamurai: built without an MT-32 (Munt's libmt32emu): its music is not heard\n");
+  if (host.sound == 'R') fprintf(stderr, "opensamurai: built without the MT-32 (Munt's libmt32emu): the AdLib's sound instead\n"), host.sound = 'A';
 #endif
   if (SDL_Init(SDL_INIT_VIDEO | (host.sound != 'N' ? SDL_INIT_AUDIO : 0)))
   {

@@ -17,3 +17,8 @@
 build*/
 tools/__pycache__/
 extern/*/
+!extern/munt/
+dist/
+# nor the MT-32's firmware
+*.rom
+*.ROM
