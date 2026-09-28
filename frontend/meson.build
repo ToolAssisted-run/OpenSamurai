@@ -1,8 +1,15 @@
 fs = import('fs')
-# The game in a window (SDL2), if SDL2 is there
+# The game in a window (SDL2), if SDL2 is there: the system's, or built in from the WrapDB wrap (extern/sdl2.wrap;
+# tools/build-bundle.sh forces it for Linux, so the release needs only the C library)
 # (on Windows SDL2 is linked in, as everything else: the program is one file)
 windows = host_machine.system() == 'windows'
-sdl2Dependency = dependency('sdl2', required : false, static : windows)
+# (`static` only for Windows: `static : false` would make a fallback's library shared)
+sdl2Options = [ 'default_library=static', 'use_video_offscreen=enabled', 'test=false' ]   # (offscreen: headless runs)
+if windows
+  sdl2Dependency = dependency('sdl2', required : false, static : true, default_options : sdl2Options)
+else
+  sdl2Dependency = dependency('sdl2', required : false, default_options : sdl2Options)
+endif
 # the MT-32's sound: Munt's libmt32emu (LGPL-2.1-or-later), built from extern/munt (a git submodule) and linked in
 # statically; else an installed one (pkg-config mt32emu); else none
 mt32emuDependency = dependency('', required : false)

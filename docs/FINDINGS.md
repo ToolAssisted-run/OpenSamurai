@@ -25,7 +25,7 @@ files, its memory, its mechanics and the methods used to find them. It is update
 | READ.ME | 3/5/90 addendum: `/NT` skips the title, Alt-N new game, Alt-J joystick, the driver list |
 
 All six programs are Microsoft C 5.1 (MELEE: 5.0) and EXEPACK'd. They need `loadfix` under DOSBox (the
-EXEPACK "Packed file is corrupt" A20 bug). Unpacked copies are made with pop2dec's `unexepack.py`.
+EXEPACK "Packed file is corrupt" A20 bug). Unpacked copies are made with the workspace's `unexepack.py`.
 
 ## 2. The launcher protocol
 
