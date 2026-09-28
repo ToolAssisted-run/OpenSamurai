@@ -98,6 +98,8 @@ i16 rp_getenv(i16 name)
 
 i32 rp_time(i16 p)
 {
+  // the library's time() sets the time zone from the environment once (tzset: no TZ, the defaults stay)
+  if (!*P16(0x5BB4)) *P16(0x5BB4) = 1;
   u32 t = host && host->time ? host->time(host->ctx) : 0;
   if (p) *P32((u16)p) = t;
   return (i32)t;
@@ -224,7 +226,7 @@ i16 rp_intdos(i16 in, i16 out)
   u16 i = (u16)in, o = (u16)out;
   for (int k = 0; k < 14; k++) *P8(o + k) = *P8(i + k);
   u8 ah = *P8(i + 1);
-  if (DEBUG_FILES) fprintf(stderr, "rp: intdos %02X bx=%d\n", ah, *P16(i + 2));
+  if (DEBUG_FILES) fprintf(stderr, "rp: intdos AX=%04X bx=%d cx:dx=%04X:%04X\n", *P16(i), *P16(i + 2), *P16(i + 4), *P16(i + 6));
   u16 ax = *P16(i), bx = *P16(i + 2), cx = *P16(i + 4), dx = *P16(i + 6);
   *P16(o + 12) = 0;  // cflag
   if (ah == 0x42 && bx < 20 && files[bx].f)
@@ -242,10 +244,8 @@ i16 rp_intdos(i16 in, i16 out)
 
 i16 rp_int86(i16 n, i16 in, i16 out)
 {
-  (void)n;
-  for (int k = 0; k < 14; k++) *P8((u16)out + k) = *P8((u16)in + k);
-  *P16((u16)out + 12) = 0;
-  return (i16)*P16((u16)out);
+  static const MscErrno rpErrno = { 0x34C6, 0x34C3, 0x3504, 0x34BB };
+  return (i16)asm_msc_int86((u8)n, (u16)in, (u16)out, &rpErrno);
 }
 
 // the C library's stream functions (the scroll of honour, the saved game): not in the tests yet
@@ -283,7 +283,25 @@ void rp_fatal_memory(i16 name, i16 suffix)
 
 // ---------------------------------------------------------------- the assembly module (168c)
 
-i16 FileOnDisk(i16 name, i16 disk) { (void)name; (void)disk; return 1; }
+// is the file on the disk in the drive (168c:0002)? It saves the critical-error vector (DS:05D2 segment, 05D4
+// offset) and puts its own, parses the name into the FCB at DS:05D7 (INT 21h 29h) and looks for it (11h), asking
+// for the other drive if not; here the game's files are all there: 0
+i16 FileOnDisk(i16 name, i16 disk)
+{
+  (void)disk;
+  *P16(0x5D2) = *(u16a *)far_ptr(0, 0x92);
+  *P16(0x5D4) = *(u16a *)far_ptr(0, 0x90);
+  const char *s = NEAR((u16)name);
+  u8 *fcb = P8(0x5D7);
+  fcb[0] = 0;
+  memset(fcb + 1, ' ', 11);
+  int k = 0;
+  for (; *s && *s != '.' && k < 8; s++) fcb[1 + k++] = (u8)(*s >= 'a' && *s <= 'z' ? *s - 32 : *s);
+  while (*s && *s != '.') s++;
+  if (*s == '.') s++;
+  for (k = 0; *s && k < 3; s++) fcb[9 + k++] = (u8)(*s >= 'a' && *s <= 'z' ? *s - 32 : *s);
+  return 0;
+}
 // the hibernation: the data segment (DS:0000-975F: data, BSS, stack) at seg:0004, the stack pointer at seg:0000
 void SaveContext(u16 seg)
 {
@@ -302,7 +320,17 @@ void InstallTimer(void) { *P8(0x303f) = 1; }
 void RestoreTimer(void) {}
 void SaveVectors(void) {}
 void RestoreVectors(void) {}
-void RegisterOverlay(u16 seg) { (void)seg; }
+// a driver's entries into the stubs (168c:0CE7): the overlay header's first slot (+2E), count (+30), offsets
+// (+32) and code segment (+28), into the far jumps at DS:3060 + 5 slot
+void RegisterOverlay(u16 seg)
+{
+  u16 stub = (u16)(0x3060 + (u8)*far_ptr(seg, 0x2E) * 5), n = *(u16a *)far_ptr(seg, 0x30), cs = *(u16a *)far_ptr(seg, 0x28);
+  for (u16 k = 0; k < n; k++, stub += 5)
+  {
+    *P16(stub + 1) = *(u16a *)far_ptr(seg, (u16)(0x32 + 2 * k));
+    *P16(stub + 3) = cs;
+  }
+}
 void HookKeyboard(void) {}
 void UnhookKeyboard(void) {}
 

@@ -153,6 +153,11 @@ extern u8 asm_dac[256][3];
 void asm_int(u8 n);
 void asm_unknown_call(u16 seg, u16 off);
 void asm_bad_switch(void);
+// MS C 5.1's int86() over the data segment's REGS structures (asm2c.c); e: the library's _doserrno, _osmajor,
+// its DOS error to errno table, errno
+typedef struct { u16 doserrno, osmajor, table, errno_; } MscErrno;
+u16 asm_msc_int86(u8 n, u16 in, u16 out, const MscErrno *e);
+
 // the interrupts a program's runtime serves (DOS files, the clock, ...): true if it did; asm_int serves the rest
 extern bool (*asm_int_hook)(u8 n);
 // the ports a frontend serves (the VGA status 3DAh: the retrace, in real time): the value read

@@ -108,6 +108,42 @@ void asm_int(u8 n)
   fprintf(stderr, "asm2c: int %02X AX=%04X\n", n, R.ax);
 }
 
+// MS C 5.1's int86(n, in, out): it builds "int n; retf" on the stack and calls it with the registers of the REGS
+// structure at DS:in (ax bx cx dx si di), stores them at DS:out (and cflag); the carry is the one its own
+// compare leaves (set for n < 25h) unless the service sets it (the BIOS's keep the flags); with it,
+// _dosmaperr(AL) sets _doserrno and errno (by the library's table, DOS 3 or later's codes) and the result is
+// out.ax
+u16 asm_msc_int86(u8 n, u16 in, u16 out, const MscErrno *e)
+{
+  Regs saved = R;
+  R.ax = *P16(in);
+  R.bx = *P16(in + 2);
+  R.cx = *P16(in + 4);
+  R.dx = *P16(in + 6);
+  R.si = *P16(in + 8);
+  R.di = *P16(in + 10);
+  R.cf = n < 0x25;
+  asm_int(n);
+  *P16(out) = R.ax;
+  *P16(out + 2) = R.bx;
+  *P16(out + 4) = R.cx;
+  *P16(out + 6) = R.dx;
+  *P16(out + 8) = R.si;
+  *P16(out + 10) = R.di;
+  bool cf = R.cf;
+  R = saved;
+  *P16(out + 12) = cf;
+  if (cf)
+  {
+    u8 al = (u8)*P16(out);
+    *P8(e->doserrno) = al;
+    if (*P8(e->osmajor) >= 3 && al >= 0x20 && al < 0x22) al = 5;
+    else if (al > 0x13) al = 0x13;
+    *P16(e->errno_) = (u16)(i16)(i8)*P8((u16)(e->table + al));
+  }
+  return *P16(out);
+}
+
 void asm_unknown_call(u16 seg, u16 off)
 {
   fprintf(stderr, "asm2c: call to %04X:%04X, which is not known\n", seg, off);

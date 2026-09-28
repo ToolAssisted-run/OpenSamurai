@@ -59,6 +59,11 @@ bool game_setup(const GameHost *h)
   w16(0, 0x20, 0xFEA5), w16(0, 0x22, 0xF000);  // the timer
   w16(0, 0x24, 0xE987), w16(0, 0x26, 0xF000);  // the keyboard
   w16(0, 0x6C, 0xD1A0), w16(0, 0x6E, 0xF000);  // Ctrl-Break
+  // the launcher's terminate address, DOS's Ctrl-C and critical-error handlers (DOS copies them into each
+  // program's PSP and puts them back from there when it ends)
+  w16(0, 0x88, 0x0258), w16(0, 0x8A, 0x189E);
+  w16(0, 0x8C, 0x0128), w16(0, 0x8E, 0x072F);
+  w16(0, 0x90, 0x0110), w16(0, 0x92, 0x072F);
   // the BIOS data area: text mode, the keyboard buffer empty; the launcher's words at 40:F0 (the shared block)
   *far_ptr(0x40, 0x49) = 3;
   w16(0x40, 0x1A, 0x1E), w16(0x40, 0x1C, 0x1E);
@@ -115,6 +120,7 @@ static bool program_load(const char *name, ExeInfo *e)
   w16(GAME_PSP_SEG, 0x00, 0x20CD);
   w16(GAME_PSP_SEG, 0x02, MEMORY_TOP);
   w16(GAME_PSP_SEG, 0x2C, GAME_ENV_SEG);
+  memcpy(far_ptr(GAME_PSP_SEG, 0x0A), far_ptr(0, 0x88), 12);  // INT 22h-24h
   static const uint8_t jft[20] = { 1, 1, 1, 0, 2, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
   memcpy(far_ptr(GAME_PSP_SEG, 0x18), jft, sizeof jft);
   w16(GAME_PSP_SEG, 0x32, 20);
@@ -129,6 +135,13 @@ static bool program_load(const char *name, ExeInfo *e)
   if (!exe_load(path, (uint16_t)(GAME_PSP_SEG + 0x10), e)) return false;
   dos_arena_from_memory(0x2700, 0xA000);
   return true;
+}
+
+// the program ends: DOS frees its blocks and puts back INT 22h-24h from its PSP
+static void program_end(void)
+{
+  dos_free_owner(GAME_PSP_SEG);
+  memcpy(far_ptr(0, 0x88), far_ptr(GAME_PSP_SEG, 0x0A), 12);
 }
 
 // ---------------------------------------------------------------- START.EXE
@@ -263,7 +276,7 @@ static int run_start(void)
   timerFrame = start_timer_frame;
   start_entry(GAME_PSP_SEG, e.ss, e.sp);
   timerFrame = NULL;
-  dos_free_owner(GAME_PSP_SEG);  // DOS frees the program's blocks
+  program_end();
   return exitCode;
 }
 
@@ -425,7 +438,7 @@ static int run_rp(void)
   if (!setjmp(rpExit)) rp_main(regs);
   timerFrame = NULL;
   keyHook = NULL;
-  dos_free_owner(GAME_PSP_SEG);
+  program_end();
   return exitCode;
 }
 

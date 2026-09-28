@@ -103,6 +103,15 @@ static void host_frame_poll(void *ctx, uint8_t flag)
   tev("wait");
 }
 
+// the BIOS tick count (main's srand): the seed the game's srand() got next
+static uint16_t host_bios_ticks(void *ctx)
+{
+  (void)ctx;
+  for (int k = evPos; k < nev; k++)
+    if (ev[k].kind == E_SEED) return (uint16_t)ev[k].value;
+  return 0;
+}
+
 static void host_seeded(void *ctx, uint16_t seed)
 {
   (void)ctx;
@@ -123,6 +132,9 @@ static void host_subgame(void *ctx, int code)
   uint16_t flag = shared_w(0x2c);
   memcpy(shared.b, nextShared, SHARED_SIZE);
   shared_set_w(0x2c, flag);  // RP's own flag (it clears it when it resumes)
+  // the sub-game ends: DOS puts back the terminate, Ctrl-C and critical-error vectors from its PSP (its
+  // parent's: the launcher's, as RP's PSP has them)
+  memcpy(far_ptr(0, 0x88), far_ptr(0x27BC, 0x0A), 12);
 }
 static void host_exit(void *ctx, int code)
 {
@@ -139,8 +151,16 @@ static void hexbytes(const char *s, uint8_t *out, int n)
 
 // the function entries: printed in trace mode, counted always (a tick that runs away is given up)
 static long calls;
+static uint32_t watchLin;  // WATCH=LINEAR (hex): the functions entered when the word there changes
+static uint16_t watchVal;
 static void count_fn(uint32_t addr)
 {
+  if (watchLin)
+  {
+    uint16_t v = *(uint16_t *)far_ptr((uint16_t)(watchLin >> 4), (uint16_t)(watchLin & 15));
+    if (v != watchVal) printf("  WATCH %05X: %04X -> %04X at the entry of %04X:%04X\n", watchLin, watchVal, v, addr >> 16, addr & 0xFFFF);
+    watchVal = v;
+  }
   if (++calls > 20000000)
   {
     printf("  runaway: 20 million function entries (the last %04X:%04X)\n", addr >> 16, addr & 0xFFFF);
@@ -244,11 +264,12 @@ int main(int argc, char **argv)
   }
   fclose(fi);
   int run = argc > 4 && !strcmp(argv[4], "run");
+  if (getenv("WATCH")) watchLin = (uint32_t)strtoul(getenv("WATCH"), 0, 16);
   if (getenv("WATCHFN")) watchFn = (uint32_t)strtoul(getenv("WATCHFN"), 0, 16);
   int traceTick = argc > 5 && !strcmp(argv[4], "trace") ? atoi(argv[5]) : -1;
   static uint8_t ds[RP_DS_SIZE];
   dsImage = ds;
-  RpHost host = { host_time, host_key_waiting, host_read_key, host_frame_poll, host_seeded, NULL, host_exit, host_subgame, argv[3], NULL };
+  RpHost host = { host_time, host_key_waiting, host_read_key, host_frame_poll, host_seeded, host_bios_ticks, host_exit, host_subgame, argv[3], NULL };
   rp_attach(ds, DS_SEG, SHARED_SEG, &host);
   rp_set_arena(0x9000, 0x9FFF);
   if (argc > 5 && !strcmp(argv[4], "main"))
@@ -275,9 +296,9 @@ int main(int argc, char **argv)
     if (evPos < nev && peek() && peek()->n < t[0].n && errors++ < 5) printf("  the game had more before the first tick: %s at n=%llu\n", kind_name(peek()->kind), (unsigned long long)peek()->n);
     int diff = 0, s2 = 0;
     for (int k = 0; k < DS_LEN; k++)
-      if (ds[k] != t[0].ds[k] && !volatile_byte(k)) { if (s2++ < 12) printf(" %04X:%02X/%02X", k, ds[k], t[0].ds[k]); diff++; }
+      if (ds[k] != t[0].ds[k] && !volatile_byte(k)) { if (s2++ < (getenv("SHOW") ? atoi(getenv("SHOW")) : 12)) printf(" %04X:%02X/%02X", k, ds[k], t[0].ds[k]); diff++; }
     for (int k = 0; k < SHARED_SIZE; k++)
-      if (shared.b[k] != t[0].sh[k]) { if (s2++ < 12) printf(" shared+%03X:%02X/%02X", k, shared.b[k], t[0].sh[k]); diff++; }
+      if (shared.b[k] != t[0].sh[k]) { if (s2++ < (getenv("SHOW") ? atoi(getenv("SHOW")) : 12)) printf(" shared+%03X:%02X/%02X", k, shared.b[k], t[0].sh[k]); diff++; }
     printf("\n%s: main to the first tick: %d bytes differ, %d input differences (main)\n", argv[1], diff, errors);
     return diff || errors;
   }
@@ -290,6 +311,8 @@ int main(int argc, char **argv)
       memcpy(ds, a->ds, RP_DS_SIZE);
       memcpy(shared.b, a->sh, SHARED_SIZE);
       memcpy(far_ptr(MEM_BASE >> 4, 0), a->mem, MEM_LEN);
+      if (MEM_BASE > 0)  // older captures, without the interrupt vectors: DOS's critical-error handler's (DOSBox-X)
+        *(uint16_t *)far_ptr(0, 0x90) = 0x0110, *(uint16_t *)far_ptr(0, 0x92) = 0x072F;
       rp_arena_from_memory(0x4000, 0xA000);
     }
     evPos = 0;

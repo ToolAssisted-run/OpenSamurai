@@ -231,6 +231,18 @@ captures are driven by random menu keys from a new game (the workspace's oracle/
 by comparing the functions entered and the events served with the real game's instruction trace, filtered
 through a FIFO (oracle/rtrace.sh).
 
+Results (2026-09-28): 15 of 16 captures of 20,000 frames from a new game pass tick by tick and in one run
+(141 ticks, 20 of them across a sub-game); the key-waiting and key answers are the MISC calls' return values at
+their return sites (probing the BIOS buffer at the stub's entry raced the keyboard interrupt). From main's entry
+(its state captured there) to the first tick passes too: RP's start-up, with the pieces the C had stood in for
+made faithful -- the drivers' stubs filled from the overlay headers (168c:0CE7), FileOnDisk's saved critical-error
+vector and FCB (the vector as DOS's INT 21h 35h reports it: 072F:0110, not the IVT's 072F:0000 in DOSBox-X),
+time()'s once-only tzset flag (DS:5BB4), int86()'s carry (set by its own compare for n < 25h and kept by the BIOS:
+int86(10h) always ends in _dosmaperr(AL), errno 22).
+- 1000:05BF (after flush_keys' read) is also flush_keys' entry, as START's 04A1.
+- When a program ends, DOS puts INT 22h-24h back from its PSP: after a sub-game the critical-error vector is the
+  launcher's again.
+
 ### 5.5 The start-up program (START.EXE) — recompiled in source/start_core.c, verified
 
 START is the floppy's program (445.03), with its copy protection: the crest quiz runs while shared+0x2E is 0

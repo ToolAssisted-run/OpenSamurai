@@ -180,30 +180,12 @@ void st_LzwDecodeRow(i16 dst)
 
 // ---------------------------------------------------------------- the library functions kept in C
 
-// int86(n, in, out): the registers from and to the REGS structures (ax bx cx dx si di cflag) in the data segment
+// int86(n, in, out): it builds its INT instruction on the stack (asm2c's emulation, with START's errno)
 i16 st_int86(i16 n, i16 in, i16 out)
 {
   FN(0x1000560C);
-  Regs saved = R;
-  u16 i = (u16)in, o = (u16)out;
-  R.ax = *P16(i);
-  R.bx = *P16(i + 2);
-  R.cx = *P16(i + 4);
-  R.dx = *P16(i + 6);
-  R.si = *P16(i + 8);
-  R.di = *P16(i + 10);
-  R.cf = 0;
-  asm_int((u8)n);
-  *P16(o) = R.ax;
-  *P16(o + 2) = R.bx;
-  *P16(o + 4) = R.cx;
-  *P16(o + 6) = R.dx;
-  *P16(o + 8) = R.si;
-  *P16(o + 10) = R.di;
-  *P16(o + 12) = R.cf ? 1 : 0;
-  u16 ax = R.ax;
-  R = saved;
-  return (i16)ax;
+  static const MscErrno stErrno = { 0x2002, 0x1FFF, 0x2140, 0x1FF7 };
+  return (i16)asm_msc_int86((u8)n, (u16)in, (u16)out, &stErrno);
 }
 
 // ---------------------------------------------------------------- DOS and the BIOS
