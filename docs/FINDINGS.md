@@ -551,6 +551,22 @@ reinforcements (s × 10 + 10) %, quotas). BATTLE: 2 − d on each damage roll (+
 enemy generalship 16d + 32 in battle types 0-3 and 7, else shared+6E × (1 − (2 − d) × 20 %). The starting morale
 steps for generalship add up: −15 below 25, −5 at 25-48, +5 at 72-96, +15 above 96.
 
+The challenge (*code*, 177D:16D0 (challenger c, target t)). The player's challenge first moves t's favour balance
+towards him by 12 (1568:06FC(0, t, 12)). An NPC target decides with two simulations on the working block (saved
+to 6C94 and restored): refusal = t's honor − clamp(honor_c, 32 + 6 × difficulty, 128), rescore (133F:09CA),
+R = (128 − honor_t) × t.+5E / 128; fight = 133F:1456(t, 128·sword_c / (sword_c + sword_t + 1), 0) and
+133F:1456(c, 128·sword_t / (… + 1), 1), rescore, F = t.+5E × honor_t / 128; t refuses when R > F (no random
+number). A real refusal costs t clamp(honor_c, 32, 128) honor (the floor has no difficulty term), message 0x5C
+(player challenger, who is sent home, 1568:0964) or 0x58 (NPC challenger, sent home), and the desertion check
+(1568:0818) for t. The player refusing an NPC's challenge (menu 0x5D): clamp(honor_c, 32, 128), message 0x5E,
+desertion check. Accepted: the player's duel (23BB:019E, sword ±4 on return) — won: 0x66 and the opponent dies
+(133F:1456(x, 128, 1)); fell: the capture check 1568:03B0; retreated: −32 honor, 0x3A, desertion check; NPC vs
+NPC: `random(sword_t) < random(sword_c)` ⇒ the challenger wins (0x95, sword +4), else the target (0x96), the loser
+dies. Every outcome ends in the tail (1B15): if ch[t].+34[c] > 0 the challenger loses twice it in honor, and both
+entries are zeroed. The +34 table (1568:0670(a, b, v) moves ch[b].+34[a] − ch[a].+34[b] by v) is a ledger of who
+owes whom: a caught kidnapper or traitor gets ch[culprit].+34[victim] += 16 (177D:1E87, 2224), the rival helped
+in a defence ch[t].+34[helper] += half the troops lent (177D:08D5).
+
 RP's random stream (*code*): the resume path after a fight (23BB:0222 after the context restore) does not call the
 seeding (1000:04C4): the generator state (DS:34FC) comes back with the data segment, and the resume only draws
 `random(8)` for the patience line. (reports/RP.md §6 says it reseeds; it does not.)
