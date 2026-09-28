@@ -540,6 +540,21 @@ cavalry > infantry > musketeers + 4 musketeers within 32 px + the footing in mel
 In a campaign (177D:0688) a defeat (shared+4E) is only message 0x4C; a concession (R) is −32 honor, message 0x3A
 and the desertion check (1568:0818); the men of units that left the field are not losses.
 
+The difficulty (*code*), shared+36 = 0..3 (Tanto, Wakizashi, Katana, No-Dachi), chosen in START, saved, copied to
+RP's DS:853A, never changed. RP: the ending's score base DS:1F22 = −70/−40/−10/0 (Shogun points = score × 10 +
+950) and its blade name (DS:1F2C), HONOR.SCL keeps it; the temperament filter of 133F:063A for every character
+rolled; the capture check after fleeing (1568:03B0: released always / 2 in 3 / 1 in 3 / never, captured = seppuku
+and the heir, no heir = game over); the bold deed's swordsman and the rivals' bold-deed odds `rand(DS:05FC[d]) <
+rand(sword)` (a failing rival dies); the honor reward (DS:05FC/2358, above); kenjutsu one step lower. DUEL: skill base
+2d. MELEE: skill base 2d (classes, muskets from skill 4, recognition, aim, room spawns (s × 10 + 20) %, castle
+reinforcements (s × 10 + 10) %, quotas). BATTLE: 2 − d on each damage roll (+ for the player, − for the enemy),
+enemy generalship 16d + 32 in battle types 0-3 and 7, else shared+6E × (1 − (2 − d) × 20 %). The starting morale
+steps for generalship add up: −15 below 25, −5 at 25-48, +5 at 72-96, +15 above 96.
+
+RP's random stream (*code*): the resume path after a fight (23BB:0222 after the context restore) does not call the
+seeding (1000:04C4): the generator state (DS:34FC) comes back with the data segment, and the resume only draws
+`random(8)` for the patience line. (reports/RP.md §6 says it reseeds; it does not.)
+
 The machines (*code*, and 5.8 for START). The duel (7 frames) and the battle (17 frames) run by the retrace: at
 60 Hz (CGA, EGA, Tandy) 8.6 frames and 3.5 steps a second against VGA's 10 and 4.1 (*reading*: not run at 60 Hz).
 MELEE's retrace check scales by /32 where BATTLE's has /16 ((count × 17/32)/3977 = 2, outside 4..6), so it always
