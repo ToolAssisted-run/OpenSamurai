@@ -53,6 +53,18 @@ void start_main(const uint16_t regs[9])
   exitArmed = false;
 }
 
+void start_entry(uint16_t psp, uint16_t ss, uint16_t sp)
+{
+  R = (Regs){ 0 };
+  R.ds = R.es = psp;
+  R.ss = ss;
+  R.sp = g_sp = sp;
+  R.cs = START_CS;
+  exitArmed = true;
+  if (!setjmp(exitJump)) st_crt0_body();
+  exitArmed = false;
+}
+
 void st_exit(i16 code)
 {
   if (host && host->exit) host->exit(host->ctx, code);
@@ -239,6 +251,10 @@ static bool start_int(u8 n)
   if (DEBUG_FILES > 1) fprintf(stderr, "start: int 21h AX=%04X BX=%04X CX=%04X DX=%04X\n", R.ax, R.bx, R.cx, R.dx);
   switch (ah)
   {
+  case 0x30:  // DOS's version: 5.0 (DOSBox-X's)
+    R.ax = 0x0005;
+    R.bx = R.cx = 0;
+    return true;
   case 0x09:  // a '$' message
     if (DEBUG_FILES)
     {

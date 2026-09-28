@@ -25,6 +25,8 @@ jmp_buf *st_jmpbuf(u16 buf);
 void st_longjmp(u16 buf);
 // main's body (start_core.c)
 void st_main_body(void);
+// the start-up (start_core.c)
+void st_crt0_body(void);
 
 // kept in C: the picture decoder (1757), int86(), exit()
 u16 st_PicHeader(void);

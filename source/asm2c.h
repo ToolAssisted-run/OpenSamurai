@@ -148,11 +148,15 @@ static inline void IDIV16(u16 b, u16 ip) { i32 a = (i32)(((u32)R.dx << 16) | R.a
 // what the recompiled code cannot do by itself
 u16 asm_port_in(u16 port);
 void asm_port_out(u16 port, u16 value);
+// the VGA DAC (the palette: 256 colours, 6 bits a component) as the programs and drivers set it
+extern u8 asm_dac[256][3];
 void asm_int(u8 n);
 void asm_unknown_call(u16 seg, u16 off);
 void asm_bad_switch(void);
 // the interrupts a program's runtime serves (DOS files, the clock, ...): true if it did; asm_int serves the rest
 extern bool (*asm_int_hook)(u8 n);
+// the ports a frontend serves (the VGA status 3DAh: the retrace, in real time): the value read
+extern u16 (*asm_port_hook)(u16 port);
 void asm_far_call(u16 seg, u16 off);  // a call through a far function pointer (rp_core.c)
 #define ASM_PORT_IN(p) asm_port_in(p)
 #define ASM_PORT_OUT(p, v) asm_port_out(p, v)

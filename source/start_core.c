@@ -15939,3 +15939,5 @@ void st_far_call(u16 seg, u16 off)
 
 // main (1000:0010), entered with its return address on the stack
 void st_main_body(void) { a_1000_0010(); }
+// the C library start-up (1000:5006), the entry of the executable, as DOS starts it
+void st_crt0_body(void) { a_1000_5006(); }

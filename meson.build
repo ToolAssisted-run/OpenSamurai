@@ -15,6 +15,9 @@ subdir('source')
 # Do not build any targets if this is a subproject
 if meson.is_subproject() == false
 
+  # The game
+  subdir('frontend')
+
   # Test programs and the test suite
   if get_option('buildTests') == true
     subdir('tests')

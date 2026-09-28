@@ -34,9 +34,11 @@ void asm_divide_error(u16 ip)
 // and the DAC (3C8 index, 3C9 red, green, blue): the palette the frontend shows
 u8 asm_dac[256][3];
 static u8 dacIndex, dacPart;
+u16 (*asm_port_hook)(u16 port);
 u16 asm_port_in(u16 port)
 {
   static u8 status;
+  if (asm_port_hook) return asm_port_hook(port);
   if (port == 0x3DA) return status ^= 0x09;
   return 0;
 }

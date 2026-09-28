@@ -1,7 +1,7 @@
 # The reconstructed game as one library. It is linked whole so that routines a test or the frontend
 # replaces (weak defaults) behave as if every source were compiled into the program.
 opensamuraiSources = files(
-  'asm2c.c', 'battle.c', 'battle_math.c', 'battle_setup.c', 'battle_tables.c', 'catalog.c', 'dosmem.c', 'dsimage.c', 'duel.c',
+  'asm2c.c', 'battle.c', 'battle_math.c', 'battle_setup.c', 'battle_tables.c', 'catalog.c', 'dosmem.c', 'dsimage.c', 'duel.c', 'exe.c', 'game.c',
   'duel_tables.c', 'lzw.c', 'melee_core.c', 'melee_rt.c', 'mgraphic.c', 'rp_core.c', 'rp_rt.c', 'shared.c', 'start_core.c', 'start_rt.c',
 )
 

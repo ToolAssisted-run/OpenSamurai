@@ -22,7 +22,7 @@ typedef struct
   // are when the wait ends
   void (*framePoll)(void *ctx, int site);
   uint16_t (*biosTicks)(void *ctx);  // the BIOS tick count (INT 1Ah: the random seed)
-  void (*exit)(void *ctx, int code);  // exit(): does not return (1 on to the role-playing game, 0 quit, 99 a file error)
+  void (*exit)(void *ctx, int code);  // exit() (1 on to the role-playing game, 0 quit, 99 a file error)
   const char *gameDir;                // the game's files
   void *ctx;
 } StartHost;
@@ -33,6 +33,10 @@ void start_attach(uint8_t *ds, uint16_t dsSeg, uint16_t sharedSeg, const StartHo
 
 // Runs the program from main (1000:0010) with the registers SP BP SI DI ES AX BX CX DX there, until exit()
 void start_main(const uint16_t regs[9]);
+
+// Runs the program from its entry (1000:5006, the C library's start-up) as DOS starts it: DS = ES = its program
+// segment prefix, the stack as its header has it; until exit() (the host's exit may return: this does then)
+void start_entry(uint16_t psp, uint16_t ss, uint16_t sp);
 
 // Called with the original address (seg << 16 | off, Ghidra's segments) of every function as it is entered
 extern void (*start_trace)(uint32_t addr);
