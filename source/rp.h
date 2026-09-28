@@ -30,6 +30,7 @@ typedef struct
   const char *gameDir;                       // the game's files
   void *ctx;
   bool restart;  // the host restarts RP after a sub-game (see subgame); else RP resumes at once (the tests)
+  bool writeFiles;  // the saved games (TALLTALE.DAT) are written to gameDir (else the writes succeed without a file)
 } RpHost;
 
 // Use this data segment image (RP_DS_SIZE bytes) and host for the calls below; dsSeg and sharedSeg are the

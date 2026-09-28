@@ -287,7 +287,7 @@ title, the credits, the quiz failed (8) and passed (4), the career menu, the Scr
 the province map, difficulty, family advantage. Not covered yet: the encounters of the career menu, the
 joystick (the captures have none), the sound boards.
 
-### 5.6 The action programs as programs (DUEL.EXE, BATTLE.EXE) — recompiled whole, verified
+### 5.6 The action programs as programs (DUEL.EXE, BATTLE.EXE, MELEE.EXE) — recompiled whole, verified
 
 For the one executable the action games run as the programs they are (their screens, their input), beside the
 readable reconstructions of their simulations (5.1, 5.2): recompiled whole like START (the workspace's
@@ -303,9 +303,15 @@ duelexe_rt.c and battleexe_rt.c (the picture decoder and exit in C; the DOS emul
   1000:6822). The terrain's seed reads the BIOS ticks at 0040:006C itself. Ghidra's function list misses the unit
   state handlers of the table at DS:0042 (states 0, 1, 9, 13), the damage routine 1000:0A1C and 1000:8804; they
   are reached through pointers (near calls through a pointer go through a dispatcher of the segment's functions).
-- Verified: 9 duels (3,580 frame waits) and a battle's 257 steps from main to exit (or the capture's end), the data
-  segment and the shared block equal at every checkpoint, the interrupt handlers' bytes (the frame timer's, the
-  keyboard joystick's) set from the capture at the checkpoints.
+- MELEE: loads its own graphics driver (EGRAPHIC.MEL on VGA, INT 21h 4B03 at 4887): the EGA's planar mode 0Dh
+  with a 320x400 virtual page it scrolls with the CRTC's start address (source/vga.c emulates the planes, the
+  latches, the write and read modes, the registers). The main loop runs unthrottled and reads the tick counter
+  DS:53 (the timer's callback 1FE7:043E counts it while DS:57 says so) on each pass; a speed calibration counts
+  its own loop's passes for 15 ticks: the host answers every read with the game's value. Its keyboard joystick
+  is DUEL's (DS:398C-3996). time() goes through intdos.
+- Verified: 9 duels (3,580 frame waits), 9 battles (1,300 steps) and a melee (3,538 ticks) from main to exit (or
+  the capture's end), the data segment and the shared block equal at every checkpoint, the interrupt handlers'
+  bytes (the timers', the keyboard joysticks') set from the capture at the checkpoints.
 
 ### 5.7 The launcher and the frontend (source/game.c, frontend/main.c)
 
@@ -319,8 +325,12 @@ action program and then RP again from main, whose resume goes back into the hibe
 Frames pass with the frontend's clock (70.086 Hz) whenever a program looks at the time; the running program's timer
 handler counts them once it has hooked INT 8; RP's and DUEL's INT 9 handlers (a keyboard joystick) are emulated
 from the frontend's scan codes. frontend/main.c: SDL2, mode 13h through the DAC, the BIOS's keys; scripted runs
-(OPENSAMURAI_KEYS, _SHOTS, _FRAMES, _FAST). Not yet: the melee (its EGRAPHIC.MEL driver draws in the EGA's planar
-mode with hardware scrolling), sound, saving.
+(OPENSAMURAI_KEYS, _SCANS, _SHOTS, _FRAMES, _FAST). The melee runs with its EGA driver, shown through the VGA
+emulation; a melee that turns into a duel runs the duel after it (the launcher's rule). RP's saved games are
+written to the game directory. Not yet: sound (the no-sound driver is the setup's choice), the joystick.
+
+Open: one RP capture of 16 (seed 14) differs after three sub-games in one tick (20 bytes of the character
+records), with the sub-games' own results replayed.
 
 ## 6. Methods
 
@@ -363,7 +373,8 @@ F-keys not at all; decoded with the workspace's work/jrsrkeys.py.
 
 ## 8. Log
 
-- 2026-09-28: DUEL and BATTLE recompiled whole and verified; the frontend plays START, RP, the duel and the battle.
+- 2026-09-28: DUEL, BATTLE and MELEE recompiled whole and verified; the frontend plays the whole game (START, RP,
+  the duel, the battle, the melee in the EGA's planar mode), saves included.
 - 2026-09-28: START recompiled whole (the library too); 12 captures pass from main to exit.
 - 2026-09-27: the melee translated over its data segment and corrected until it matched its captures.
 - 2026-09-27: the battle's simulation reconstructed and verified against 96 captures (63,535 steps).

@@ -208,20 +208,56 @@ i16 _dos_read(i16 h, u16 off, u16 seg, u16 n, i16 pn)
   return 0;
 }
 
-// saving: the reconstruction's tests do not write files (the frontend will)
+// saving: the saved games, when the host lets RP write (the frontend); the tests' writes succeed without a file
 i16 _dos_creat(i16 name, i16 attr, i16 ph)
 {
-  (void)name;
   (void)attr;
-  *P16((u16)ph) = 19;
-  return 0;
+  if (!host || !host->writeFiles)
+  {
+    *P16((u16)ph) = 19;
+    return 0;
+  }
+  // the file as DOS names it (upper case), or the one of that name in any case already there
+  char upper[80];
+  const char *n = NEAR((u16)name);
+  int k = 0;
+  for (; n[k] && k < 79; k++) upper[k] = (char)(n[k] >= 'a' && n[k] <= 'z' ? n[k] - 32 : n[k]);
+  upper[k] = 0;
+  const char *dir = host->gameDir ? host->gameDir : ".";
+  char path[1024];
+  snprintf(path, sizeof path, "%s/%s", dir, upper);
+  DIR *d = opendir(dir);
+  if (d)
+  {
+    struct dirent *e;
+    while ((e = readdir(d)))
+      if (!strcasecmp(e->d_name, upper)) snprintf(path, sizeof path, "%s/%s", dir, e->d_name);
+    closedir(d);
+  }
+  FILE *f = fopen(path, "wb");
+  if (DEBUG_FILES) fprintf(stderr, "rp: create %s -> %s\n", path, f ? "ok" : "failed");
+  if (!f) return 5;
+  for (int h = 5; h < 20; h++)
+    if (!files[h].f)
+    {
+      files[h].f = f;
+      *P16((u16)ph) = (u16)h;
+      return 0;
+    }
+  fclose(f);
+  return 4;
 }
 
 i16 _dos_write(i16 h, u16 off, u16 seg, u16 n, i16 pn)
 {
-  (void)h;
-  (void)off;
-  (void)seg;
+  if (host && host->writeFiles && h >= 5 && h < 20 && files[h].f)
+  {
+    u16 k = 0;
+    for (; k < n; k++)
+      if (fputc(*far_ptr(seg, (u16)(off + k)), files[h].f) == EOF) break;
+    *P16((u16)pn) = k;
+    return 0;
+  }
   *P16((u16)pn) = n;
   return 0;
 }

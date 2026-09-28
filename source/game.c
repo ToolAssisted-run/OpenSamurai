@@ -452,7 +452,7 @@ static void rp_start(void)
   w16(RP_DS, 0x9754, 0x00B2), w16(RP_DS, 0x9756, 0x37FA);
   w16(RP_DS, 0x9758, 0), w16(RP_DS, 0x975A, 0), w16(RP_DS, 0x975C, 0);
   static const uint16_t regs[9] = { 0x9754, 0, 0x396A, 0x396A, GAME_ENV_SEG, 0x80D3, 0xFFFF, 0x7FE5, 0x80D3 };
-  static RpHost rh = { rp_time_, rp_key_waiting, rp_read_key, rp_frame_poll, NULL, rp_bios_ticks, rp_exit_, rp_subgame, NULL, NULL, true };
+  static RpHost rh = { rp_time_, rp_key_waiting, rp_read_key, rp_frame_poll, NULL, rp_bios_ticks, rp_exit_, rp_subgame, NULL, NULL, true, true };
   rh.gameDir = host->gameDir;
   g_dsSeg = 0;
   rp_attach(far_ptr(RP_DS, 0), RP_DS, GAME_SHARED_SEG, &rh);
