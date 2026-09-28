@@ -235,7 +235,7 @@ bool dos_int21(void)
       dos_error(6);
       return true;
     }
-    long pos = (long)(((u32)R.cx << 16) | R.dx);
+    long pos = (long)(int32_t)(((u32)R.cx << 16) | R.dx);  // (signed: CX:DX)
     fseek(files[R.bx], pos, al == 0 ? SEEK_SET : al == 1 ? SEEK_CUR : SEEK_END);
     long now = ftell(files[R.bx]);
     R.ax = (u16)now;

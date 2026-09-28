@@ -1,6 +1,8 @@
 fs = import('fs')
 # The game in a window (SDL2), if SDL2 is there
-sdl2Dependency = dependency('sdl2', required : false)
+# (on Windows SDL2 is linked in, as everything else: the program is one file)
+windows = host_machine.system() == 'windows'
+sdl2Dependency = dependency('sdl2', required : false, static : windows)
 # the MT-32's sound: Munt's libmt32emu (LGPL-2.1-or-later), built from extern/munt (a git submodule) and linked in
 # statically; else an installed one (pkg-config mt32emu); else none
 mt32emuDependency = dependency('', required : false)
@@ -8,6 +10,7 @@ frontendArgs = commonCompileArgs
 frontendRpath = ''
 frontendLinkLanguage = 'c'
 frontendLinkDepends = []
+frontendLinkArgs = windows ? [ '-static' ] : []
 if get_option('mt32').allowed() and fs.exists(meson.project_source_root() / 'extern' / 'munt' / 'mt32emu' / 'CMakeLists.txt')
   add_languages('cpp', native : false)
   cmake = import('cmake')
@@ -44,6 +47,8 @@ if sdl2Dependency.found()
     dependencies : [ opensamuraiDependency, sdl2Dependency, mt32emuDependency ],
     link_language : frontendLinkLanguage,
     link_depends : frontendLinkDepends,
+    link_args : frontendLinkArgs,
+    win_subsystem : windows ? 'windows' : 'console',
     build_rpath : frontendRpath,
     install_rpath : frontendRpath,
     install : true,

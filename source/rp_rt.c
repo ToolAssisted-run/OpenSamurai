@@ -273,7 +273,7 @@ i16 rp_intdos(i16 in, i16 out)
   *P16(o + 12) = 0;  // cflag
   if (ah == 0x42 && bx < 20 && files[bx].f)
   {
-    long pos = (long)(((u32)cx << 16) | dx);
+    long pos = (long)(int32_t)(((u32)cx << 16) | dx);  // (signed: CX:DX)
     fseek(files[bx].f, pos, (ax & 0xff) == 0 ? SEEK_SET : (ax & 0xff) == 1 ? SEEK_CUR : SEEK_END);
     long now = ftell(files[bx].f);
     *P16(o) = (u16)now;

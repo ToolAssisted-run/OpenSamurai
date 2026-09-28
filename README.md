@@ -21,9 +21,15 @@ The whole game plays: the title, the crest quiz, character creation, the role-pl
 
 `tools/package.sh` makes the deliverable, `dist/opensamurai-VERSION-SYSTEM-MACHINE.tar.gz`: the program (it needs only SDL2 on the system), an empty `roms` folder for the MT-32's ROMs, this file, the license, and Munt's license.
 
+### Windows
+
+`tools/package-windows.sh` cross-builds the Windows version on Linux with MinGW-w64 (`tools/x86_64-w64-mingw32.ini`, a Meson cross file; it fetches SDL2's MinGW build, checksum checked, the first time), into `dist/opensamurai-VERSION-windows-x86_64.zip`: `opensamurai.exe`, one file with SDL2 and the MT-32 in it, the `roms` folder, and the licenses.
+
 ## Playing
 
     build/frontend/opensamurai path/to/the/game
+
+On Windows, put `opensamurai.exe` (and its `roms` folder) in the game's folder and start it there: without a folder named, the program's own folder is the game's if the game is there. Arguments go after the folder, or alone (`opensamurai.exe /AR`), in a shortcut or at the command prompt.
 
 Use the files of the original floppy disks: the copy protection (the crest quiz) is part of the game. Saved games (Alt-S at the Home Option scroll) are written to the game's folder, as the original does. After the folder, `/NT` skips the title, `/NJ` leaves the joystick out (one plugged in is used; Alt-J turns it on and off in the game, as in the original), and `/A` and a letter chooses the sound as the original's setup does: `/AA` the AdLib (the default), `/AR` the Roland MT-32, `/AI` the IBM PC speaker, `/AT` the Tandy, `/AN` none. The MT-32 needs its ROMs, a control ROM and a PCM ROM, which are Roland's and not included: you provide your own. Put the two files (any names: they are recognized by their contents) in one of these folders, looked at in this order: the folder the `OPENSAMURAI_MT32ROMS` environment variable names; your data folder's `roms` (on Linux `~/.local/share/OpenSamurai/roms`, on Windows `%APPDATA%\OpenSamurai\roms`); the `roms` folder next to the program; the game's folder. An original MT-32's ROMs (versions 1.04 to 1.07) are the sound the game was made for; a later MT-32's or a CM-32L's work too. Without them `/AR` plays the AdLib's sound, and says where it looked. With the speaker the start-up program runs slower, as it does in the original (see docs/FINDINGS.md, 5.8). The AdLib driver is the later one (1-10-94) that the game's later releases have.
 

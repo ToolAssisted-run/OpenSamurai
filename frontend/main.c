@@ -8,10 +8,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #include "asm2c.h"
 #include "vga.h"
 #include "game.h"
+#include "rp.h"
+#include "start.h"
 
 uint8_t *far_ptr(uint16_t seg, uint16_t off);
 
@@ -522,12 +528,67 @@ static void midi_file_end(void)
   fclose(midiFile);
 }
 
+// OPENSAMURAI_WATCHDOG=SECONDS (debugging): when the run takes longer, the last functions START or RP entered are
+// printed, and it ends
+static uint32_t lastFns[16];
+static int lastFn;
+static void last_fn(uint32_t addr) { lastFns[lastFn] = addr; lastFn = (lastFn + 1) % 16; }
+static void __attribute__((unused)) last_rp_fn(uint32_t addr) { last_fn(addr | 0x80000000u); }
+static void __attribute__((unused)) watchdog(int sig)
+{
+  (void)sig;
+  fprintf(stderr, "watchdog: at frame %ld, the last functions entered:", frameCount);
+  for (int k = 0; k < 16; k++) fprintf(stderr, " %s%04X:%04X", lastFns[(lastFn + k) % 16] >> 31 ? "rp " : "", (lastFns[(lastFn + k) % 16] >> 16) & 0x7FFF, lastFns[(lastFn + k) % 16] & 0xFFFF);
+  fprintf(stderr, "\nwatchdog: SS:SP %04X:%04X, the stack:", R.ss, R.sp);
+  for (int k = 0; k < 24; k++) fprintf(stderr, " %04X", *(uint16_t *)far_ptr(R.ss, (uint16_t)(R.sp + 2 * k)));
+  fprintf(stderr, "\n");
+  _exit(3);
+}
+
+// a message for the player: on the error output, and on Windows (where a program started with a double-click has no
+// console) in a message box too
+static void notify_player(const char *msg)
+{
+  fputs(msg, stderr);
+#ifdef _WIN32
+  SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Sword of the Samurai", msg, NULL);
+#endif
+}
+
 int main(int argc, char **argv)
 {
-  if (argc < 2)
+  // the game's folder: the first argument; without one (started with a double-click), the program's folder or the
+  // current one, if the game is there
+  static char *args[64], here[1024];
+  DIR *first = argc >= 2 ? opendir(argv[1]) : NULL;  // (a folder: the game's; else an option such as /NT)
+  if (first) closedir(first);
+  if (argc < 2 || (!first && (argv[1][0] == '/' || argv[1][0] == '-')))
   {
-    fprintf(stderr, "usage: opensamurai GAMEDIR [/NT] [/NJ] [/AA|/AR|/AI|/AT|/AN]\n  GAMEDIR: the game's files (the original floppy's)\n  /NT: no title; /NJ: no joystick; the sound: /AA the AdLib's (the default), /AR the MT-32's, /AI the IBM speaker's, /AT Tandy's, /AN none\n");
-    return 2;
+    char *base = SDL_GetBasePath();
+    const char *found = NULL;
+    for (int k = 0; k < 2 && !found; k++)
+    {
+      if (k == 0 && !base) continue;
+      snprintf(here, sizeof here, "%s", k == 0 ? base : ".");
+      size_t n = strlen(here);
+      if (n > 1 && (here[n - 1] == '/' || here[n - 1] == '\\')) here[n - 1] = 0;
+      char path[1100];
+      snprintf(path, sizeof path, "%s/START.EXE", here);
+      FILE *f = fopen(path, "rb");
+      if (!f) snprintf(path, sizeof path, "%s/start.exe", here), f = fopen(path, "rb");
+      if (f) fclose(f), found = here;
+    }
+    if (base) SDL_free(base);
+    if (!found)
+    {
+      notify_player("usage: opensamurai GAMEDIR [/NT] [/NJ] [/AA|/AR|/AI|/AT|/AN]\n  GAMEDIR: the game's files (the original floppy's; without it, the program's folder if the game is there)\n  /NT: no title; /NJ: no joystick; the sound: /AA the AdLib's (the default), /AR the MT-32's, /AI the IBM speaker's, /AT Tandy's, /AN none\n");
+      return 2;
+    }
+    args[0] = argv[0];
+    args[1] = (char *)found;
+    for (int k = 1; k < argc && k < 62; k++) args[k + 1] = argv[k];
+    argc = argc < 62 ? argc + 1 : 63;
+    argv = args;
   }
   scriptKeys = getenv("OPENSAMURAI_KEYS");
   scriptShots = getenv("OPENSAMURAI_SHOTS");
@@ -566,6 +627,9 @@ int main(int argc, char **argv)
     return 1;
   }
   scriptJoy = getenv("OPENSAMURAI_JOY");
+#ifndef _WIN32
+  if (getenv("OPENSAMURAI_WATCHDOG")) start_trace = last_fn, rp_trace = last_rp_fn, signal(SIGALRM, watchdog), alarm((unsigned)atoi(getenv("OPENSAMURAI_WATCHDOG")));
+#endif
   if (useJoystick && !scriptJoy && SDL_NumJoysticks() > 0) joy = SDL_JoystickOpen(0);
   if (!useJoystick) host.joystick = NULL;
   if (joy) fprintf(stderr, "opensamurai: the joystick: %s\n", SDL_JoystickName(joy));
@@ -590,7 +654,12 @@ int main(int argc, char **argv)
   if (wav) wav_header(wavFrames), fclose(wav);
   if (midiFile) midi_file_end();
   if (audioDevice) SDL_CloseAudioDevice(audioDevice);
-  if (code < 0) fprintf(stderr, "opensamurai: the game's files are not all in %s (MISC.EXE, NSOUND.SAM, MGRAPHIC.EXE, FONTS.SAM, START.EXE, ...)\n", argv[1]);
+  if (code < 0)
+  {
+    char msg[1400];
+    snprintf(msg, sizeof msg, "opensamurai: the game's files are not all in %s (MISC.EXE, NSOUND.SAM, MGRAPHIC.EXE, FONTS.SAM, START.EXE, ...)\n", argv[1]);
+    notify_player(msg);
+  }
   SDL_Quit();
   return code < 0 ? 1 : 0;
 }

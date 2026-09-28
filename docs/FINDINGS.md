@@ -435,15 +435,35 @@ the position. An axis is read by timing: a write to 201h starts the one-shots, a
 each axis's bit is 1 (the count grows with the stick's position; the loop gives up after 65535). The centre is the
 count when 96 is called; 97 reports each axis as a signed byte, -127 to 127, against the most extreme count seen
 on that side since the centre (a count past it is a new extreme, reported as -127 or 127). The setup asks "Do you
-have a joystick" (shared+34 = 1), then "Center joystick, then press fire button 1" and the corners, which only fill
-MISC's extremes: START and RP call 96 again at their start, so the calibration is theirs. READ.ME: Alt-J turns the
+have a joystick" (shared+34 = 1), then "Center joystick, then press fire button 1" (the centre, 96) and the upper
+left and the lower right (97 at each: the extremes), kept in MISC's data (MISC stays in memory): the programs read
+the stick against the setup's calibration. Uncalibrated, a centred stick reads as far right and down (a centre of
+0), and the strategic map's cursor runs off the map: its window list becomes a pointer to segment 0, which the
+drawing loop (2339:070C) walks for ever. The launcher here calibrates as the setup does, before the first program. READ.ME: Alt-J turns the
 joystick on and off in the game.
 
-The frontend: a joystick plugged in makes the setup's answer yes (/NJ: no); MISC's recompiled code answers slots
+The frontend: a joystick plugged in makes the setup's answer yes (/NJ: no), and the setup's calibration is done with
+the model's centre and corners; MISC's recompiled code answers slots
 95-97 (the tests keep the captured answers), and the game port is modelled: after a write, each axis's bit reads 1
 for 20 + the position x 400 / 65536 reads, the buttons' bits 0 while pressed, all 1s with no joystick plugged in;
 a read of the port lets the time go on, as a look at the keyboard does. Not verified against the real game (the
 oracle's DOSBox-X has no joystick to move); the same code and data as the real MISC.
+
+### 5.13 The Windows build
+
+Cross-built with MinGW-w64 (tools/x86_64-w64-mingw32.ini, tools/package-windows.sh): one opensamurai.exe with SDL2
+(its static MinGW library), Munt and the C++ runtime linked in, a Windows (GUI) program: its messages in message
+boxes, and started without a folder it takes its own as the game's if the game is there. What had to change: the
+names of the MS C library's functions RP was recompiled with that MinGW's headers or Windows' libraries have too
+(_filbuf, _flsbuf; FillRect, a Windows function) are renamed in rp_rt.h; the DOS seeks' offsets (CX:DX) are made
+signed explicitly (a long is 32 bits on Windows, 64 on Linux).
+
+Verification, under Wine: every oracle capture through the Windows build's tests and the Linux build's (780 runs:
+START, DUEL, BATTLE, MELEE and RP, run and step, the battle's set-up, the duel's, the battle's and the melee's
+simulations, the four sound drivers): the outputs the same, line for line; the scripted sessions of the game
+(30,000 frames of random keys, each sound driver, with and without a joystick): every screenshot, the sound and the
+MIDI the same, byte for byte, but the MT-32's sound (Munt's floating point with Windows' and Linux's C libraries:
+0.9% of the samples differ, by an RMS of 1 in 212); a saved game written the same, and restored the same.
 
 ## 6. Methods
 

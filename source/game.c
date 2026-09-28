@@ -535,16 +535,18 @@ static uint16_t port_in(u16 port)
 // the game port (201h): a write starts the joystick's one-shots, each axis's bit then reads 1 for as many reads as its
 // position says (MISC counts them: its centre and its extremes calibrate them); the buttons' bits read 0 pressed
 static int portCount[2];
+static bool calibrating;  // the setup's calibration: the stick where it asks for it
+static int calibrationX, calibrationY;
 static void joystick_port_out(void)
 {
-  int x = 0, y = 0;
-  host->joystick(host->ctx, &x, &y);
+  int x = calibrationX, y = calibrationY;
+  if (!calibrating) host->joystick(host->ctx, &x, &y);
   portCount[0] = 20 + (int)((int64_t)(x + 32768) * 400 / 65536);
   portCount[1] = 20 + (int)((int64_t)(y + 32768) * 400 / 65536);
 }
 static uint8_t joystick_port_in(void)
 {
-  int x, y, b = host->joystick(host->ctx, &x, &y);
+  int x, y, b = calibrating ? 0 : host->joystick(host->ctx, &x, &y);
   if (b < 0) return 0xFF;  // (none plugged in: the one-shots never end, the buttons are up)
   uint8_t v = (uint8_t)(0xFC & ~((b & 3) << 4));
   for (int k = 0; k < 2; k++)
@@ -556,6 +558,26 @@ static bool misc_slot(int slot)
 {
   mi_slot(slot);
   return true;
+}
+
+// the setup's calibration of the joystick (SU.EXE: "Center joystick, then press fire button 1", then the upper left
+// and the lower right): MISC's centre (slot 96) and its extremes (slot 97 at each corner), kept in MISC's data for
+// the programs, which read the stick against them
+static void joystick_calibrate(void)
+{
+  static const int at[3][2] = { { 0, 0 }, { -32768, -32768 }, { 32767, 32767 } };
+  Regs saved = R;
+  calibrating = true;
+  for (int k = 0; k < 3; k++)
+  {
+    calibrationX = at[k][0], calibrationY = at[k][1];
+    R.ss = 0x9000, R.sp = 0xFFF0;  // (a stack of its own: no program runs yet)
+    PUSH(0x1234);
+    PUSH(0x0000);
+    mi_slot(k ? 97 : 96);
+  }
+  calibrating = false;
+  R = saved;
 }
 
 static bool port_out(u16 port, u8 v)
@@ -979,6 +1001,7 @@ int game_run(const GameHost *h)
   asm_sound_slot = sound_slot;
   asm_idle_hook = frame;  // (a driver waiting for its tick: the next frame's interrupts)
   asm_misc_slot = haveJoystick ? misc_slot : NULL;
+  if (haveJoystick) joystick_calibrate();
   int code = run_start();
   // the launcher: RP and its exit codes (1-3 the action games, which RP runs itself while it hibernates: see
   // rp_rt.c; 4 a new game: START again; 0 the end)

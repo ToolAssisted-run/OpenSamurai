@@ -46,6 +46,9 @@
 #define getenv rp_getenv
 #define strncmp rp_strncmp
 #define atoi rp_atoi
+#define FillRect rp_FillRect
+#define _flsbuf rp__flsbuf
+#define _filbuf rp__filbuf
 
 #undef DRV
 // a driver call through the far-jump slot table at DS:3060 (graphics 0-47, MISC 90-97, sound 100-106;
