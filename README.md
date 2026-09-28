@@ -8,7 +8,7 @@ The original game is a chain of separate DOS programs: a setup program, the titl
 
 ## Status
 
-The whole game plays: the title, the crest quiz, character creation, the role-playing game, and the duels, battles and melees it leads to, with saved games. Each original program is rebuilt from its machine code and checked against the real game running in an emulator. The sound of the AdLib, the IBM PC speaker and the Tandy is in; the Roland MT-32 and the joystick are not yet. The work is documented in [docs/FINDINGS.md](docs/FINDINGS.md).
+The whole game plays: the title, the crest quiz, character creation, the role-playing game, and the duels, battles and melees it leads to, with saved games. Each original program is rebuilt from its machine code and checked against the real game running in an emulator. The sound of the AdLib, the Roland MT-32, the IBM PC speaker and the Tandy is in; the joystick is not yet. The work is documented in [docs/FINDINGS.md](docs/FINDINGS.md).
 
 ## Building
 
@@ -16,13 +16,13 @@ The whole game plays: the title, the crest quiz, character creation, the role-pl
     meson compile -C build
     meson test -C build
 
-`gameDir` is the folder with `SAMURAI.COM` (or `OLD.COM`) and the `.CAT` files. Without it, the tests that need the game's data are skipped. The game itself (`build/frontend/opensamurai`) needs SDL2.
+`gameDir` is the folder with `SAMURAI.COM` (or `OLD.COM`) and the `.CAT` files. Without it, the tests that need the game's data are skipped. The game itself (`build/frontend/opensamurai`) needs SDL2. The MT-32's music needs [Munt](https://github.com/munt/munt)'s libmt32emu (not part of this project): if it is installed where pkg-config finds it, the game is built with it (for a copy of your own, `meson setup build -Dpkg_config_path=PREFIX/lib/pkgconfig`).
 
 ## Playing
 
     build/frontend/opensamurai path/to/the/game
 
-Use the files of the original floppy disks: the copy protection (the crest quiz) is part of the game. Saved games (Alt-S at the Home Option scroll) are written to the game's folder, as the original does. After the folder, `/NT` skips the title, and `/A` and a letter chooses the sound as the original's setup does: `/AA` the AdLib (the default), `/AI` the IBM PC speaker, `/AT` the Tandy, `/AN` none. With the speaker the start-up program runs slower, as it does in the original (see docs/FINDINGS.md, 5.8). The AdLib driver is the later one (1-10-94) that the game's later releases have.
+Use the files of the original floppy disks: the copy protection (the crest quiz) is part of the game. Saved games (Alt-S at the Home Option scroll) are written to the game's folder, as the original does. After the folder, `/NT` skips the title, and `/A` and a letter chooses the sound as the original's setup does: `/AA` the AdLib (the default), `/AR` the Roland MT-32, `/AI` the IBM PC speaker, `/AT` the Tandy, `/AN` none. The MT-32 needs its ROMs (`MT32_CONTROL.ROM` and `MT32_PCM.ROM`, or Munt's names such as `mt32_ctrl_1_07.rom` and `mt32_pcm.rom`) in the game's folder, or in the folder `OPENSAMURAI_MT32ROMS` names. With the speaker the start-up program runs slower, as it does in the original (see docs/FINDINGS.md, 5.8). The AdLib driver is the later one (1-10-94) that the game's later releases have.
 
 ## License
 

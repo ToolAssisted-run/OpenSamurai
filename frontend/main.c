@@ -2,6 +2,7 @@
 // palette), 70 frames a second as on the VGA; the keyboard gives the BIOS's keys.
 #include <SDL.h>
 #include <ctype.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,7 +21,8 @@ static uint16_t keys[64];
 static int keyHead, keyTail;
 // for scripted runs: OPENSAMURAI_KEYS="FRAME:KEY ..." (KEY hexadecimal, the BIOS's), OPENSAMURAI_SHOTS="FRAME ..."
 // (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting;
-// OPENSAMURAI_WAV=FILE: the sound written to a WAV file; OPENSAMURAI_MIDI=FILE: the MT-32's MIDI to a MIDI file
+// OPENSAMURAI_WAV=FILE: the sound written to a WAV file; OPENSAMURAI_MIDI=FILE: the MT-32's MIDI to a MIDI file;
+// OPENSAMURAI_MT32ROMS=DIR: the MT-32's ROMs (else the game's directory)
 static long frameCount, lastFrame = -1;
 static const char *scriptKeys, *scriptShots, *scriptScans;
 // OPENSAMURAI_SCANS="FRAME:+SS FRAME:-SS ..." (SS the PC's scan code, hexadecimal; +e/-e for the grey keys): the
@@ -292,25 +294,87 @@ static uint16_t read_key(void *ctx)
   return k;
 }
 
-// the speaker's sound: to the audio device (at most a quarter of a second ahead), and to OPENSAMURAI_WAV (a WAV
-// file of it all)
+// the sound (stereo, 44100 Hz): the game's (mono) and the MT-32's, to the audio device (at most a quarter of a
+// second ahead), and to OPENSAMURAI_WAV (a WAV file of it all)
 static SDL_AudioDeviceID audioDevice;
 static FILE *wav;
-static uint32_t wavSamples;
+static uint32_t wavFrames;
 static void put32(uint32_t v, FILE *f) { for (int k = 0; k < 4; k++) fputc((int)(v >> 8 * k) & 0xFF, f); }
 static void wav_header(uint32_t n)
 {
   fseek(wav, 0, SEEK_SET);
-  fwrite("RIFF", 1, 4, wav), put32(36 + 2 * n, wav), fwrite("WAVEfmt ", 1, 8, wav);
-  put32(16, wav), put32(1 | 1 << 16, wav), put32(44100, wav), put32(88200, wav), put32(2 | 16 << 16, wav);
-  fwrite("data", 1, 4, wav), put32(2 * n, wav);
+  fwrite("RIFF", 1, 4, wav), put32(36 + 4 * n, wav), fwrite("WAVEfmt ", 1, 8, wav);
+  put32(16, wav), put32(1 | 2 << 16, wav), put32(44100, wav), put32(176400, wav), put32(4 | 16 << 16, wav);
+  fwrite("data", 1, 4, wav), put32(4 * n, wav);
   fseek(wav, 0, SEEK_END);
 }
+
+#ifdef HAVE_MT32EMU
+// the MT-32 (Munt's libmt32emu, when the build found it): its ROMs from OPENSAMURAI_MT32ROMS (a directory), else the
+// game's; the MIDI at its time, rendered with the game's sound
+#define MT32EMU_API_TYPE 1
+#include <mt32emu.h>
+static mt32emu_context mt32;
+// its reports: no debugging messages; the messages the game shows on its display, once each
+static mt32emu_report_handler_version MT32EMU_C_CALL mt32_version(mt32emu_report_handler_i i)
+{
+  (void)i;
+  return MT32EMU_REPORT_HANDLER_VERSION_0;
+}
+static void MT32EMU_C_CALL mt32_debug(void *data, const char *fmt, va_list list) { (void)data, (void)fmt, (void)list; }
+static void MT32EMU_C_CALL mt32_lcd(void *data, const char *message)
+{
+  static char last[64];
+  (void)data;
+  if (!strncmp(last, message, sizeof last - 1)) return;
+  snprintf(last, sizeof last, "%s", message);
+  fprintf(stderr, "opensamurai: the MT-32's display: %s\n", message);
+}
+static const mt32emu_report_handler_i_v0 mt32Reports = { mt32_version, mt32_debug, NULL, NULL, mt32_lcd };
+static bool mt32_open(const char *dir)
+{
+  static const char *controls[] = { "MT32_CONTROL.ROM", "mt32_ctrl_1_07.rom", "mt32_ctrl_1_06.rom", "mt32_ctrl_1_05.rom", "mt32_ctrl_1_04.rom", "CM32L_CONTROL.ROM" };
+  static const char *pcms[] = { "MT32_PCM.ROM", "mt32_pcm.rom", "CM32L_PCM.ROM" };
+  mt32emu_report_handler_i reports = { &mt32Reports };
+  mt32 = mt32emu_create_context(reports, NULL);
+  char path[1024];
+  bool control = false, pcm = false;
+  for (unsigned k = 0; k < sizeof controls / sizeof *controls && !control; k++)
+    snprintf(path, sizeof path, "%s/%s", dir, controls[k]), control = mt32emu_add_rom_file(mt32, path) > 0;
+  for (unsigned k = 0; k < sizeof pcms / sizeof *pcms && !pcm; k++)
+    snprintf(path, sizeof path, "%s/%s", dir, pcms[k]), pcm = mt32emu_add_rom_file(mt32, path) > 0;
+  mt32emu_set_stereo_output_samplerate(mt32, 44100);
+  if (!control || !pcm || mt32emu_open_synth(mt32) != MT32EMU_RC_OK)
+  {
+    fprintf(stderr, "opensamurai: no MT-32 ROMs (MT32_CONTROL.ROM, MT32_PCM.ROM) in %s: its music is not heard\n", dir);
+    mt32emu_free_context(mt32);
+    mt32 = NULL;
+    return false;
+  }
+  return true;
+}
+#endif
+
 static void audio(void *ctx, const int16_t *samples, int n)
 {
   (void)ctx;
-  if (wav) fwrite(samples, 2, (size_t)n, wav), wavSamples += (uint32_t)n;
-  if (audioDevice && SDL_GetQueuedAudioSize(audioDevice) < 44100 / 4 * 2) SDL_QueueAudio(audioDevice, samples, (Uint32)n * 2);
+  static int16_t st[2 * 4096];
+  if (n > 4096) n = 4096;
+  for (int k = 0; k < n; k++) st[2 * k] = st[2 * k + 1] = samples[k];
+#ifdef HAVE_MT32EMU
+  if (mt32)
+  {
+    static int16_t mt[2 * 4096];
+    mt32emu_render_bit16s(mt32, mt, (mt32emu_bit32u)n);
+    for (int k = 0; k < 2 * n; k++)
+    {
+      int v = st[k] + mt[k];
+      st[k] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+    }
+  }
+#endif
+  if (wav) fwrite(st, 4, (size_t)n, wav), wavFrames += (uint32_t)n;
+  if (audioDevice && SDL_GetQueuedAudioSize(audioDevice) < 44100 / 4 * 4) SDL_QueueAudio(audioDevice, st, (Uint32)n * 4);
 }
 
 // the MT-32's MIDI (/AR): to OPENSAMURAI_MIDI, a standard MIDI file (one track; a tick a sample: 22050 a quarter
@@ -348,6 +412,9 @@ static void midi_event(uint64_t sample)
 static void midi(void *ctx, uint8_t b, uint64_t sample)
 {
   (void)ctx;
+#ifdef HAVE_MT32EMU
+  if (mt32) mt32emu_parse_stream_at(mt32, &b, 1, mt32emu_convert_output_to_synth_timestamp(mt32, (mt32emu_bit32u)sample));
+#endif
   if (b >= 0xF8) return;  // (real-time messages)
   if (b & 0x80)
   {
@@ -405,6 +472,11 @@ int main(int argc, char **argv)
     host.sound = 'A';
   }
   if (getenv("OPENSAMURAI_MIDI")) midiFile = fopen(getenv("OPENSAMURAI_MIDI"), "wb");
+#ifdef HAVE_MT32EMU
+  if (host.sound == 'R') mt32_open(getenv("OPENSAMURAI_MT32ROMS") ? getenv("OPENSAMURAI_MT32ROMS") : argv[1]);
+#else
+  if (host.sound == 'R') fprintf(stderr, "opensamurai: built without an MT-32 (Munt's libmt32emu): its music is not heard\n");
+#endif
   if (SDL_Init(SDL_INIT_VIDEO | (host.sound != 'N' ? SDL_INIT_AUDIO : 0)))
   {
     fprintf(stderr, "opensamurai: %s\n", SDL_GetError());
@@ -415,7 +487,7 @@ int main(int argc, char **argv)
     SDL_AudioSpec want = { 0 }, have;
     want.freq = 44100;
     want.format = AUDIO_S16SYS;
-    want.channels = 1;
+    want.channels = 2;
     want.samples = 1024;
     audioDevice = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     if (!audioDevice) fprintf(stderr, "opensamurai: no sound: %s\n", SDL_GetError());
@@ -428,7 +500,7 @@ int main(int argc, char **argv)
   SDL_RenderSetLogicalSize(renderer, 320, 240);  // the VGA's 320x200 on a 4:3 screen
   texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 200);
   int code = game_run(&host);
-  if (wav) wav_header(wavSamples), fclose(wav);
+  if (wav) wav_header(wavFrames), fclose(wav);
   if (midiFile) midi_file_end();
   if (audioDevice) SDL_CloseAudioDevice(audioDevice);
   if (code < 0) fprintf(stderr, "opensamurai: the game's files are not all in %s (MISC.EXE, NSOUND.SAM, MGRAPHIC.EXE, FONTS.SAM, START.EXE, ...)\n", argv[1]);

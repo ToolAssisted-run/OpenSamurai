@@ -329,8 +329,7 @@ from the frontend's scan codes. frontend/main.c: SDL2, mode 13h through the DAC,
 emulation; a melee that turns into a duel runs the duel after it (the launcher's rule). RP's saved games are
 written to the game directory (Alt-S at the Home Option scroll). RP refuses to save on the original disk
 (168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. The IBM speaker's and Tandy's
-sounds are the frontend's `/AI` and `/AT` (5.8, 5.9), the AdLib's `/AA`, the default (5.10); the MT-32's driver `/AR` runs, its MIDI
-not yet sounded (5.11). Not yet: the joystick.
+sounds are the frontend's `/AI` and `/AT` (5.8, 5.9), the AdLib's `/AA`, the default (5.10); the MT-32's `/AR` (5.11). Not yet: the joystick.
 
 Seed 14 (three sub-games in one tick) needed two things: the test replaying each sub-game's own results (the
 shared block at RP's next main entry; the test had been falling back to the next tick's), and FileOnDisk's putting
@@ -422,8 +421,10 @@ the tick for musics 0 and 5 (0x09C1). Its note table (DS:2816, a byte a channel)
 memory the launcher leaves as it was (the setup program's leftovers: in the real game BA 69 0A E9 56 FF 07 CB): the
 first note off on a channel sends that byte as the note (E9h: not even a data byte). The reconstruction's memory
 there is zeros: its first note offs are of note 0. source/mpu401.c models the interface; the MIDI goes to the host
-(GameHost.midi), and the frontend writes it to a MIDI file (OPENSAMURAI_MIDI) for now: an MT-32's sound needs a
-synthesizer. Verification: tests/soundtest.c on 8 captures of the role-playing game (about 21,400 calls each), the
+(GameHost.midi) with its time, and the frontend plays it through Munt's libmt32emu when it was built with it (an
+optional dependency, not part of the project; the ROMs from the game's folder or OPENSAMURAI_MT32ROMS), mixed with
+the rest in stereo; OPENSAMURAI_MIDI writes it to a MIDI file. The game's first SysEx writes "Sword of the Samurai"
+on the MT-32's display. Verification: tests/soundtest.c on 8 captures of the role-playing game (about 21,400 calls each), the
 driver's memory past its image as the real game's (MEM=, a dump of the oracle's memory before the driver starts):
 identical.
 
