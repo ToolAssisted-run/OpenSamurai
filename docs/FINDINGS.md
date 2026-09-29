@@ -540,7 +540,8 @@ provinces; exact odds over the age group and rolls: Sagami 1 in 4,444, Settsu 1 
 9,697, Mino never (land 40); with 96 troops too (rolled honor 96) Sagami 1 in 13,333, Hyuga/Etchu 1 in 19,512. A scan
 of all 65,536 RP seeds (srand(ticks), then (ticks & 0xFFF) + 3 rand() calls before 133F:1B40; the harness matches the
 w_V21 capture's four characters) with Hyuga + honor: 9 seeds give the ceiling, 3 with 96 troops (0DFA, 959F, FF94);
-their rivals come out at 108 honor (wife + heir), 128 land, 108 troops. Best expected total: Sagami + honor 308 (troops
+their rivals come out at 108 honor (wife + heir), 128 land, 108 troops. Played end to end (the frontend, OPENSAMURAI_SEED=7582,
+fast mode: the quiz passed, Hyuga, Tanto, honor): RP gets 0DFA and the four characters are the scan's row. Best expected total: Sagami + honor 308 (troops
 14), Mino + land or honor 306 (16); the best 256-point provinces reach 293 (Hyuga/Etchu + honor, troops 26).
 
 The duel's opponent (*code*; the practice captures have equal swordsmanship, a bonus of 0). DUEL 1000:0010: skill =
