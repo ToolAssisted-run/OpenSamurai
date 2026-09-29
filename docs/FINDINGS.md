@@ -534,7 +534,10 @@ of a year) to 0x96, 15 years. The family advantage (shared+30E 0..3 → 1568:05E
 troop count ignores it. At rank 1 the player is rolled first and each rival (all in the player's province, 1C39) is
 rerolled while his score (133F:0D3C) is not above the player's (1D44); the advantage is already in, so an honor
 advantage (+48 score) raises the bar far more than swordsmanship or generalship (+8). The set is rerolled unless
-the player is fourth (1DFA), which the per-rival test already guarantees. Difficulty and name play no part.
+the player is fourth (1DFA), which the per-rival test already guarantees. Difficulty and name play no part. The
+ceiling is 128/128/112/128 (honor gift only, the roll caps honor at 96); exact odds over the age group and rolls:
+Sagami 1 in 13,333, Hyuga and Etchu 1 in 19,512, Mino never (land 40). Best expected total: Sagami + honor 308 (troops
+14), Mino + land or honor 306 (16); the best 256-point provinces reach 293 (Hyuga/Etchu + honor, troops 26).
 
 The duel's opponent (*code*; the practice captures have equal swordsmanship, a bonus of 0). DUEL 1000:0010: skill =
 clamp(2 × shared+36 + bitlength((unsigned)(shared+6A − shared+68) >> 4), 0, 7), where RP puts the player's
