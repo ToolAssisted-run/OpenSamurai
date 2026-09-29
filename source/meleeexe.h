@@ -24,6 +24,9 @@ typedef struct
   void (*exit)(void *ctx, int code);  // exit() (1 back to RP, 0 quit, 99 a file error): may return
   const char *gameDir;
   void *ctx;
+  // the random generator's seeds (1000:4E5C's srand of ftime()'s milliseconds' low byte, at each of its calls): the
+  // byte (NULL: the clock's)
+  uint8_t (*seed)(void *ctx);
 } MeleeExeHost;
 
 #define MELEE_DS 0x3886  // the data segment in the oracle's layout (Ghidra's 20BA)

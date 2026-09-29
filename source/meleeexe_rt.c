@@ -134,6 +134,9 @@ u16 ml_ticks(u16 site)
   return *P16(0x53);
 }
 
+// a seed (1000:4E5C): the host's, else the clock's
+u8 ml_seed(u8 fromClock) { return host && host->seed ? host->seed(host->ctx) : fromClock; }
+
 void ml_step(void)
 {
   if (host && host->step) host->step(host->ctx);

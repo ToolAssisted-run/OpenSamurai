@@ -13746,6 +13746,7 @@ static void a_1000_4e5c(void)
   PUSH(0x4e69); a_1000_f8ba();                                 // 4e66 call 0xfffff8ba
   R.sp = (u16)(ADD16(R.sp, 0x2));                              // 4e69 add sp, 2
   SETL(R.ax, M8(SS, (u16)(R.bp + 0xfff2)));                    // 4e6c mov al, byte ptr [bp - 0xe]
+  SETL(R.ax, ml_seed((u8)R.ax));  // FIX: the host's seed, if it gives one
   W8(SS, (u16)(R.bp + 0xfffa), (u8)R.ax);                      // 4e6f mov byte ptr [bp - 6], al
   SETH(R.ax, SUB8((u8)(R.ax >> 8), (u8)(R.ax >> 8)));          // 4e72 sub ah, ah
   PUSH(R.ax);                                                  // 4e74 push ax

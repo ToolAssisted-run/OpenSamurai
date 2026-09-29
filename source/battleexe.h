@@ -20,6 +20,9 @@ typedef struct
   void (*exit)(void *ctx, int code);  // exit() (1 back to RP, 0 quit, 99 a file error): may return
   const char *gameDir;
   void *ctx;
+  // the random generator's seed (1000:51DE: the BIOS's tick count, before each battlefield): its value (NULL: the
+  // tick count's)
+  uint32_t (*seed)(void *ctx);
 } BattleHost;
 
 #define BATTLE_DS 0x3109  // the data segment in the oracle's layout (Ghidra's 193D)

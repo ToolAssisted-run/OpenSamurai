@@ -209,3 +209,6 @@ static bool duel_int(u8 n)
   dos_attach(&dh);
   return dos_int21();
 }
+
+// main's seed (1000:200A): the host's, else time()'s
+u16 du_seed(u16 fromTime) { return host && host->seed ? (u16)(host->seed(host->ctx) & 0x7FFF) : fromTime; }

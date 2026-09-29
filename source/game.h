@@ -32,6 +32,11 @@ typedef struct
   // the joystick: its position (x, y: -32768 left/up to 32767 right/down) and its buttons (bit 0 the first, bit 1 the
   // second); -1 if there is none (NULL: none). With one, the setup's choice is the joystick (shared+34)
   int (*joystick)(void *ctx, int *x, int *y);
+  // the game's one source of randomness: every program seeded its random numbers from the clock (START and RP the
+  // BIOS's tick count, DUEL time(), BATTLE the tick count before each battlefield, MELEE ftime()'s milliseconds at
+  // several points); here each of those seeds is drawn instead from one generator seeded with this, once, when
+  // game_run starts. The frontend takes it from the system's clock at its start (or OPENSAMURAI_SEED)
+  uint64_t seed;
 } GameHost;
 
 // The video frames (70.086 a second, the VGA's): their count so far

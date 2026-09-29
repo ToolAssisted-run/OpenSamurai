@@ -337,6 +337,19 @@ back of the critical-error vector as the game does it: `mov ds, [05D2]` before `
 the word at 05D4 of the saved vector's segment (DOS's, 072F:05D4 = 0000), not the saved offset. After the first
 disk check INT 24h is 072F:0000, and that is what the next check saves.
 
+### 5.7a One source of randomness
+
+Each original program seeds its MS C `rand()` from the clock: START (1000:035F, INT 1Ah's tick count) and RP
+(1000:04CA, the tick count; then `rand(3)` (seed & 0xFFF) times) once, DUEL once (1000:200A, `time() & 0x7FFF`),
+BATTLE before each battlefield (1000:51DE, the tick count at 0040:006C), MELEE at each of its six calls of 1000:4E5C
+(`ftime()`'s milliseconds' low byte: 100 values). In OpenSamurai these seeds are all drawn from one generator
+(splitmix64 in game.c) seeded once per game_run from GameHost.seed, which the frontend takes from the system's
+clock at its start (`time()`) or from OPENSAMURAI_SEED, and prints. Each draw keeps the range the original's clock
+gave; the programs' own generators and everything they decide are unchanged. START's and RP's hosts answer their
+only tick reads with draws; DUEL, BATTLE and MELEE have an optional `seed` in their hosts (duelexe.h, battleexe.h,
+meleeexe.h), called at the seeding site (du_seed, ba_bios_ticks, ml_seed): without it (the oracle tests' hosts) the
+clock's value is used as before.
+
 ### 5.8 Sound: the IBM speaker (ISOUND.SAM) — recompiled whole in source/isound.c, verified
 
 The sound drivers are overlays with seven slots (the stubs' 100-106): 0 start, 1 play sound N (N even, to 56h:

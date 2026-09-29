@@ -3375,6 +3375,7 @@ static void a_1000_200a(void)
   PUSH(0x201a); a_1000_4d62();                                 // 2017 call 0x4d62
   R.sp = (u16)(ADD16(R.sp, 0x2));                              // 201a add sp, 2
   R.ax = (u16)(AND16(R.ax, 0x7fff));                           // 201d and ax, 0x7fff
+  R.ax = du_seed(R.ax);  // FIX: the host's seed, if it gives one
   PUSH(R.ax);                                                  // 2020 push ax
   PUSH(0x2024); a_1000_50ee();                                 // 2021 call 0x50ee
   R.sp = (u16)(ADD16(R.sp, 0x2));                              // 2024 add sp, 2

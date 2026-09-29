@@ -102,6 +102,7 @@ int main(int argc, char **argv)
   }
   if (argc > 3) maxFrames = atoi(argv[3]);
   GameHost h = { present, now_us, sleep_until, key_waiting, read_key, { 1989, 10, 25, 12, 0, 0, 0 }, argv[1], false, NULL };
+  if (getenv("SEED")) h.seed = strtoull(getenv("SEED"), NULL, 0);  // the game's random seed (else 0)
   if (getenv("SOUND")) h.sound = getenv("SOUND")[0];  // SOUND=I: the IBM speaker's driver
   start_trace = on_fn;
   rp_trace = rp_fn;

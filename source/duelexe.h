@@ -20,6 +20,8 @@ typedef struct
   void (*exit)(void *ctx, int code);  // exit() (1 back to RP, 0 quit, 99 a file error): may return
   const char *gameDir;
   void *ctx;
+  // the random generator's seed (main's srand(time() & 0x7FFF), 1000:200A): its value, 0..7FFFh (NULL: time()'s)
+  uint16_t (*seed)(void *ctx);
 } DuelHost;
 
 #define DUEL_DS 0x2DF6  // the data segment in the oracle's layout (Ghidra's 162A)

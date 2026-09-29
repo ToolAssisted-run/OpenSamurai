@@ -22,5 +22,6 @@ u16 du_DatHeader(void);
 void du_LzwDecodeFar(u16 off, u16 seg, u16 n);
 void du_LzwDecodeRow(i16 dst);
 void du_exit(i16 code);
+u16 du_seed(u16 fromTime);
 
 #endif

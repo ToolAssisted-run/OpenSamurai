@@ -474,14 +474,42 @@ static void start_timer_frame(void)
 static bool start_hooked(void) { return *far_ptr(START_DS, 0x1BAF) != 0; }
 static const ProgTimer startTimer = { START_DS, 0x1BB0, 0x1BAC, true, start_hooked, start_timer_frame };
 
+// the game's one source of randomness (GameHost.seed): splitmix64, seeded when game_run starts. Each program's seed
+// is a draw from it, in the range its clock gave (the programs' own generators, and all they decide, are the
+// original's)
+static uint64_t randomState;
+static uint32_t random_draw(void)
+{
+  uint64_t z = (randomState += 0x9E3779B97F4A7C15u);
+  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9u;
+  z = (z ^ (z >> 27)) * 0x94D049BB133111EBu;
+  return (uint32_t)((z ^ (z >> 31)) >> 32);
+}
+
+// START's and RP's seeds: their only reads of the BIOS's tick count (START 1000:035F, RP 1000:04CA), its low word
 static uint16_t bios_ticks(void *ctx)
 {
   (void)ctx;
   poll(false);
-  GameClock c;
-  uint32_t t;
-  clock_now(&c, &t);
-  return (uint16_t)t;
+  return (uint16_t)random_draw();
+}
+// DUEL's: time() & 7FFFh (1000:200A)
+static uint16_t duel_seed(void *ctx)
+{
+  (void)ctx;
+  return (uint16_t)(random_draw() & 0x7FFF);
+}
+// BATTLE's: the tick count (1000:51DE), within a day (0..1573039)
+static uint32_t battle_seed(void *ctx)
+{
+  (void)ctx;
+  return random_draw() % 1573040u;
+}
+// MELEE's: ftime()'s milliseconds' low byte (1000:4E5C), the milliseconds being DOS's hundredths times 10: 100 values
+static uint8_t melee_seed(void *ctx)
+{
+  (void)ctx;
+  return (uint8_t)(random_draw() % 100 * 10);
 }
 
 // the VGA's status (3DAh): each retrace is a frame's end, so that the waits for it take their real time; a program
@@ -849,7 +877,7 @@ static int run_duel(void)
 {
   ExeInfo e;
   if (!program_load("DUEL.EXE", &e)) return -1;
-  static DuelHost dh = { duel_answer, duel_frame_poll, NULL, duel_exit_, NULL, NULL };
+  static DuelHost dh = { duel_answer, duel_frame_poll, NULL, duel_exit_, NULL, NULL, duel_seed };
   dh.gameDir = host->gameDir;
   g_dsSeg = 0;
   duel_attach(far_ptr(DUEL_DS, 0), GAME_SHARED_SEG, &dh);
@@ -890,7 +918,7 @@ static int run_battle(void)
 {
   ExeInfo e;
   if (!program_load("BATTLE.EXE", &e)) return -1;
-  static BattleHost bh = { battle_answer, battle_frames, NULL, duel_exit_, NULL, NULL };
+  static BattleHost bh = { battle_answer, battle_frames, NULL, duel_exit_, NULL, NULL, battle_seed };
   bh.gameDir = host->gameDir;
   g_dsSeg = 0;
   battle_attach(far_ptr(BATTLE_DS, 0), GAME_SHARED_SEG, &bh);
@@ -929,7 +957,7 @@ static int run_melee(void)
 {
   ExeInfo e;
   if (!program_load("MELEE.EXE", &e)) return -1;
-  static MeleeExeHost mh = { duel_answer, melee_ticks, NULL, NULL, duel_exit_, NULL, NULL };
+  static MeleeExeHost mh = { duel_answer, melee_ticks, NULL, NULL, duel_exit_, NULL, NULL, melee_seed };
   mh.gameDir = host->gameDir;
   g_dsSeg = 0;
   meleeexe_attach(far_ptr(MELEE_DS, 0), GAME_SHARED_SEG, &mh);
@@ -996,6 +1024,7 @@ int game_run(const GameHost *h)
   mpu_reset();
   tNow = lastIrq = 0;
   game_frames = 0;
+  randomState = h->seed;
   asm_port_hook = port_in;
   asm_port_out_hook = port_out;
   asm_sound_slot = sound_slot;

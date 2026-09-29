@@ -125,8 +125,17 @@ void ba_driver(int slot)
 
 u16 ba_frames(void) { return host && host->frames ? host->frames(host->ctx) : *P16(0x1B44); }
 
+// the seed's read of the BIOS's tick count (1000:51E6): the host's seed if it gives one (the tick count in memory
+// untouched), else the tick count
 void ba_bios_ticks(void)
 {
+  if (host && host->seed)
+  {
+    u32 s = host->seed(host->ctx);
+    R.ax = (u16)s;
+    R.dx = (u16)(s >> 16);
+    return;
+  }
   u32 t = answer(0x1A00);
   R.ax = (u16)t;
   R.dx = (u16)(t >> 16);

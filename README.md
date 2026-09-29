@@ -126,6 +126,8 @@ An original MT-32's ROMs (versions 1.04 to 1.07) are the sound the game was made
 
 `OPENSAMURAI_WAV=file.wav` records the sound, and `OPENSAMURAI_MIDI=file.mid` the MT-32's music.
 
+Every random number in a game comes from one seed, taken from the clock when OpenSamurai starts and shown in the terminal. `OPENSAMURAI_SEED=N` sets it, and the same seed draws the same random numbers.
+
 With the IBM PC speaker the title runs slower, as it does in the original.
 
 ## Building

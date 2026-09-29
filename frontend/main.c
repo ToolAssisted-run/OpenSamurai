@@ -69,7 +69,8 @@ static int keyHead, keyTail;
 // (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting, the start on
 // 25 October 1989 at noon;
 // OPENSAMURAI_WAV=FILE: the sound written to a WAV file; OPENSAMURAI_MIDI=FILE: the MT-32's MIDI to a MIDI file;
-// OPENSAMURAI_MT32ROMS=DIR: the MT-32's ROMs (else the user's data folder's roms, the program's, the game's folder)
+// OPENSAMURAI_MT32ROMS=DIR: the MT-32's ROMs (else the user's data folder's roms, the program's, the game's folder);
+// OPENSAMURAI_SEED=N: the seed of the game's random numbers (else the clock's, read once at the start)
 static long lastFrame = -1;
 static const char *scriptKeys, *scriptShots, *scriptScans;
 // OPENSAMURAI_SCANS="FRAME:+SS FRAME:-SS ..." (SS the PC's scan code, hexadecimal; +e/-e for the grey keys): the
@@ -601,7 +602,12 @@ int main(int argc, char **argv)
   if (getenv("OPENSAMURAI_FAST")) tm = &fixed;  // (a scripted run starts on the same day: it goes the same way)
   GameHost host = { present, now_us, sleep_until, key_waiting, read_key,
                     { tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, 0 },
-                    argv[1], false, NULL, 'A', audio, midi, joystick };
+                    argv[1], false, NULL, 'A', audio, midi, joystick, 0 };
+  // the game's one source of randomness (GameHost.seed): the system's clock, read once, here; OPENSAMURAI_SEED=N
+  // gives it (the same N draws the same random numbers); a scripted run (OPENSAMURAI_FAST) has 0
+  if (getenv("OPENSAMURAI_SEED")) host.seed = strtoull(getenv("OPENSAMURAI_SEED"), NULL, 0);
+  else if (!fast) host.seed = (uint64_t)t;
+  fprintf(stderr, "opensamurai: random seed %llu (OPENSAMURAI_SEED=%llu repeats it)\n", (unsigned long long)host.seed, (unsigned long long)host.seed);
   // the setup's arguments: /NT no title, /J the joystick (the default, when one is plugged in), /NJ none, /A<letter> the sound driver (A the AdLib, the default; I the IBM speaker,
   // T Tandy's, R the MT-32's, N none)
   for (int k = 2; k < argc; k++)
