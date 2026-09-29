@@ -36,6 +36,7 @@ static char soundDriver;
 // the BIOS's keyboard buffer: the host's keys, with one taken ahead for a look (INT 16h/01)
 static bool keyAhead;
 static uint16_t keyAheadValue;
+static uint8_t retrace;  // port 3DA's retrace bit, as the programs poll it (it toggles at each read)
 static bool key_waiting(void) { return keyAhead || (host->keyWaiting && host->keyWaiting(host->ctx)); }
 static uint16_t key_peek(void)
 {
@@ -122,6 +123,11 @@ bool game_setup(const GameHost *h)
   g_ds = NULL;
   g_sharedSeg = GAME_SHARED_SEG;
   memset(far_ptr(0, 0), 0, 0xA0000);
+  // the sound driver's segment too (above the video memory): the MT-32's driver reads a note table past its file's
+  // image, which a game before this one in the same process would have left behind; and the launcher's own state
+  memset(far_ptr(GAME_SOUND_DRIVER_SEG, 0), 0, 0x10000);
+  keyAhead = false;
+  retrace = 0;
   memset(shared.b, 0, SHARED_SIZE);
   // the interrupt vectors the programs save and restore (DOSBox-X's BIOS)
   w16(0, 0x00, 0xCA60), w16(0, 0x02, 0xF000);  // divide error
@@ -516,7 +522,6 @@ static uint8_t melee_seed(void *ctx)
 // that saw it begin runs at the frame's start
 static uint16_t port_in(u16 port)
 {
-  static uint8_t retrace;
   uint8_t v;
   if (port == 0x3DA)
   {
@@ -938,7 +943,7 @@ static int run_battle(void)
 static uint16_t melee_ticks(void *ctx, int site)
 {
   (void)ctx;
-  (void)site;
+  if (host->meleeTickRead) host->meleeTickRead(host->ctx, site);
   poll(false);
   return *(uint16_t *)far_ptr(MELEE_DS, 0x53);
 }

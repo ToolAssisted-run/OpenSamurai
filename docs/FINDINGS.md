@@ -350,6 +350,21 @@ only tick reads with draws; DUEL, BATTLE and MELEE have an optional `seed` in th
 meleeexe.h), called at the seeding site (du_seed, ba_bios_ticks, ml_seed): without it (the oracle tests' hosts) the
 clock's value is used as before.
 
+### 5.7b The melee's pace on a virtual clock, and a clean start
+
+MELEE is the one program whose pace depends on the machine's speed: its start-up speed test (1000:0708) counts a
+loop's passes until its timer has counted 15 ticks (15,000 passes or more make the fast machine's melee), and its
+main loop's reinforcement countdown counts passes, not ticks. Both read the tick counter through the host (sites
+0x072B and 0x3BC2), and GameHost.meleeTickRead is called just before each such read looks at the clock, so that a
+host with a virtual clock can charge the read what it cost on the original machine. The frontend's virtual clock
+(OPENSAMURAI_FAST) and gametest's charge 10 us at 0x072B and 690 us at 0x3BC2, 20 us for any other look: the fast
+machine's melee, about 21 passes a tick as in the oracle (at 20 us for every read the scripted runs had the slow
+machine's melee, flag DS:342A set, and about 700 passes a frame). A real clock needs nothing.
+
+game_setup clears the sound driver's segment (D000:0000-FFFF) with the rest of memory, and the launcher's
+read-ahead key and port 3DA's retrace toggle: the MT-32's driver reads a note table past its file's image, which a
+game before it in the same process would otherwise have left there.
+
 ### 5.8 Sound: the IBM speaker (ISOUND.SAM) — recompiled whole in source/isound.c, verified
 
 The sound drivers are overlays with seven slots (the stubs' 100-106): 0 start, 1 play sound N (N even, to 56h:

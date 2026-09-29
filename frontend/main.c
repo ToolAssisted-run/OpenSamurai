@@ -309,10 +309,24 @@ static void present(void *ctx)
 
 // the clock: real time, or (fast) a virtual one that runs a little at each look and jumps at the waits
 static uint64_t virtualNow;
+// the virtual clock (OPENSAMURAI_FAST): 20 us a look, the melee's tick reads what they cost on the original machine
+// (GameHost.meleeTickRead: the speed test's loop 10 us, a pass of its main loop 690 us: with the pass's other looks,
+// about 21 passes a tick, as in the oracle)
+static uint64_t lookCost = 20;
+static void melee_tick_read(void *ctx, int site)
+{
+  (void)ctx;
+  lookCost = site == 0x072B ? 10 : 690;
+}
 static uint64_t now_us(void *ctx)
 {
   (void)ctx;
-  if (fast) return virtualNow += 20;
+  if (fast)
+  {
+    virtualNow += lookCost;
+    lookCost = 20;
+    return virtualNow;
+  }
   return SDL_GetPerformanceCounter() * 1000000 / SDL_GetPerformanceFrequency();
 }
 
@@ -605,6 +619,7 @@ int main(int argc, char **argv)
                     argv[1], false, NULL, 'A', audio, midi, joystick, 0 };
   // the game's one source of randomness (GameHost.seed): the system's clock, read once, here; OPENSAMURAI_SEED=N
   // gives it (the same N draws the same random numbers); a scripted run (OPENSAMURAI_FAST) has 0
+  if (fast) host.meleeTickRead = melee_tick_read;
   if (getenv("OPENSAMURAI_SEED")) host.seed = strtoull(getenv("OPENSAMURAI_SEED"), NULL, 0);
   else if (!fast) host.seed = (uint64_t)t;
   fprintf(stderr, "opensamurai: random seed %llu (OPENSAMURAI_SEED=%llu repeats it)\n", (unsigned long long)host.seed, (unsigned long long)host.seed);

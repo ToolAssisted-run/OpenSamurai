@@ -37,6 +37,14 @@ typedef struct
   // several points); here each of those seeds is drawn instead from one generator seeded with this, once, when
   // game_run starts. The frontend takes it from the system's clock at its start (or OPENSAMURAI_SEED)
   uint64_t seed;
+  // MELEE's reads of its tick counter, the one place where the game's pace depends on the machine's speed: the
+  // start-up speed test (site 0x072B, a loop of a few instructions: 15,000 reads or more in its 15 ticks make the
+  // fast machine's melee, the oracle's) and each pass of the main loop (site 0x3BC2: the reinforcements count
+  // passes; the oracle ran about 21 a 60 Hz tick). Called just before such a read looks at the clock (now()), so
+  // that a host with a virtual clock can charge the read what it cost on the original machine, e.g. 10 us at
+  // 0x072B and, with a pass's other reads at 20 us each, 690 us at 0x3BC2 (about 21 passes a tick) (NULL: nothing to
+  // charge, a real clock)
+  void (*meleeTickRead)(void *ctx, int site);
 } GameHost;
 
 // The video frames (70.086 a second, the VGA's): their count so far

@@ -72,7 +72,9 @@ static void present(void *ctx)
 }
 // a virtual clock: 20 microseconds a look, the waits jump
 static uint64_t vnow;
-static uint64_t now_us(void *ctx) { (void)ctx; return vnow += 20; }
+static uint64_t lookCost = 20;  // 20 us a look, the melee's tick reads what they cost on the original machine
+static uint64_t now_us(void *ctx) { (void)ctx; vnow += lookCost; lookCost = 20; return vnow; }
+static void melee_tick_read(void *ctx, int site) { (void)ctx; lookCost = site == 0x072B ? 10 : 690; }
 static void sleep_until(void *ctx, uint64_t t) { (void)ctx; if (t > vnow) vnow = t; }
 static int key_waiting(void *ctx) { (void)ctx; return npending > 0; }
 static uint16_t read_key(void *ctx)
@@ -102,6 +104,7 @@ int main(int argc, char **argv)
   }
   if (argc > 3) maxFrames = atoi(argv[3]);
   GameHost h = { present, now_us, sleep_until, key_waiting, read_key, { 1989, 10, 25, 12, 0, 0, 0 }, argv[1], false, NULL };
+  h.meleeTickRead = melee_tick_read;
   if (getenv("SEED")) h.seed = strtoull(getenv("SEED"), NULL, 0);  // the game's random seed (else 0)
   if (getenv("SOUND")) h.sound = getenv("SOUND")[0];  // SOUND=I: the IBM speaker's driver
   start_trace = on_fn;
