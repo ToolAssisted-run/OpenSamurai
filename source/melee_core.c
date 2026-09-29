@@ -13835,12 +13835,12 @@ static u16 f_d87e(void)
     while (iVar1 = FUN_1fe7_0620(0x5436,0), iVar1 == -1) {
       f_f5a0(local_28, 0x543e);
       f_f5a0(local_4c, 0x5454);
-      local_2e = f_daa6(*P16(0x4a40), local_4c);
+      local_2e = f_daa6(*P16(0x4a40), (i8a *)local_4c);  // FIX: the buffer is Ghidra's u8[]
       local_2c = (0x140 - local_2e) / 2;
       FUN_1fe7_06e8(*P16(0x4a40),local_2c + -5,0x57,local_2e + 10,0x1b,4);
       *P16(*PS16(0x4a40) + 0xc) = 0xf;
       DRV(*P16(0x4a40),local_2c,0x65,local_4c);
-      local_4 = f_daa6(*P16(0x4a40), local_28);
+      local_4 = f_daa6(*P16(0x4a40), (i8a *)local_28);  // FIX: the buffer is Ghidra's u8[]
       local_2a = (0x140 - local_4) / 2;
       DRV(*P16(0x4a40),local_2a,0x5b,local_28);
       local_4 = local_2c + -4;
@@ -13913,7 +13913,8 @@ static u16 f_dafe(u16 param_1,u16 param_2)
   u16 local_6;
   u16 local_4;
   
-  iVar1 = f_df46(param_1, local_1c);
+  iVar1 = f_df46(param_1, (u16)(uintptr_t)local_1c);  // FIX: a stack buffer's near address in the original; here the
+                                                    // catalog stubs never read through it (as GCC before 14 converted it)
   if (iVar1 != 0) {
     iVar1 = f_dfe2(*P16(0x4e02), local_8, local_6);
     if (iVar1 != 0) {
