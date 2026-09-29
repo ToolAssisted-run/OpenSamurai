@@ -604,7 +604,7 @@ the player owns more than 8 provinces, DS:7B9A is even and random(400) > 2 × ge
 province of the player's other than the home one becomes the slot's (133F:0006(slot, 1, 3), favour −30 towards the
 player through 1568:06FC), then N = (random(8) × 5 + 15) × provinces / 100 (at least 1) more, each the first
 province of the player's (not the home one) adjacent to the rebel's (133F:13E4); 133F:063A rolls him for them;
-window 0x10F. Else a great clan (6/7, 1B28:1B68) or a new clan in a free province next to a daimyo's takes the
+window 0x10F. No cooldown: the countdown is only reset (random(2)) while a slot stays empty, and every empty slot is tried in the same call. Else a great clan (6/7, 1B28:1B68) or a new clan in a free province next to a daimyo's takes the
 slot.
 
 Ageing (*code*, 1568:013E every turn, characters 0..4 of the master block): family words + 0x2000 (a tenth of a
