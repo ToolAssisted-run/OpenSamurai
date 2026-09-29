@@ -54,6 +54,8 @@
 // a driver call through the far-jump slot table at DS:3060 (graphics 0-47, MISC 90-97, sound 100-106;
 // -1 = a call whose slot the translation could not tell)
 u16 rp_drv(int slot, ...);
+// a picture's palette (2965:00D9-00E0): push si (the palette), push 0, call far the graphics slot 25 (from 4131:0090)
+void rp_picture_palette(u16 at);
 void rp_driver(int slot);  // from recompiled code, the return address pushed
 #define DRV(...) rp_drv(__VA_ARGS__)
 

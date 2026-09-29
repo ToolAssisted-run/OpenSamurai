@@ -37587,20 +37587,26 @@ static u16 f_290b_0566(u16 p0, u16 p1, u16 p2)
 // with the original's state: DS:419A the string table, 59A0-59B2 the decoder's variables, its stack DS:59B3-5BB2,
 // 599A/599C/599E width, height, length; the input is the catalog's stream (DS:7924 read pointer, DS:2CAE end,
 // refilled through the far pointer at DS:7F46)
-static void rp_lzw_palette(u16 at) { rp_drv(25, 0, at); }
+static void rp_lzw_palette(u16 at) { rp_picture_palette(at); }
 static const LzwLayout rpLzw = { 0x419a, 0x59a0, 0x5bb3, 0x59a2, 0x59a4, 0x59a6, 0x59a8, 0x59aa, 0x59ac, 0x59af, 0x59b0,
                                  0x599a, 0x7924, 0x2cae, 0x7f46, 0x40d7, true, rp_lzw_palette, asm_far_call };
 static u16 f_2965_0008(void)
 {
   FN(0x29650008);
-  return lzw_pic_header(&rpLzw);
+  W16(SS, (u16)(g_sp - 2), R.si);  // 0008 push si (the stack's words as the original leaves them)
+  u16 h = lzw_pic_header(&rpLzw);   // (a palette's slot call writes below it: rp_picture_palette)
+  W16(SS, (u16)(g_sp - 4), 0x0096);  // 00E3 call 0x9769 (LzwInit): its return address
+  return h;
 }
 
 // 2965:0098 FUN_2965_0098  FIX: DatHeader (see 2965:0008)
 static u16 f_2965_0098(void)
 {
   FN(0x29650098);
-  return lzw_dat_header(&rpLzw);
+  W16(SS, (u16)(g_sp - 2), R.si);   // 0098 push si
+  u16 n = lzw_dat_header(&rpLzw);
+  W16(SS, (u16)(g_sp - 4), 0x00DE);  // 00DB call 0x9769 (LzwInit): its return address
+  return n;
 }
 
 // 2965:00E0 FUN_2965_00e0  FIX: decode n bytes to dst (offset, segment) (see 2965:0008)

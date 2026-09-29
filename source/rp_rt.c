@@ -508,6 +508,22 @@ void rp_driver(int slot)
   R.sp = (u16)(sp + 4);
 }
 
+// a picture's palette, as the picture decoder calls the graphics slot 25 (2965:00D9-00E0): its two arguments and its
+// far return address (2965:0090 in the original's layout, where RP's code is 17CCh paragraphs higher) below the
+// decoder's own push of SI, then the driver (its slot 25 is a retf in MGRAPHIC). Only these words are written, as
+// in the original (rp_drv's eight would put the host's stack words in the guest's)
+void rp_picture_palette(u16 at)
+{
+  u16 sp = R.sp;
+  R.sp = (u16)(g_sp - 2);
+  PUSH(at);
+  PUSH(0);
+  PUSH((u16)(0x2965 + 0x17CC));
+  PUSH(0x0090);
+  mg_slot(25);
+  R.sp = sp;
+}
+
 u16 rp_drv(int slot, ...)
 {
   va_list ap;
