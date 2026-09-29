@@ -526,8 +526,15 @@ Character creation (*code*). Name: at most 20 characters (62 pixels), empty = "N
 256 but Mino (Oda) and Sagami (Hōjō), 272; the 120s are Izu's swordsmanship, Kai's generalship, Totomi's honor,
 Mutsu's land. Difficulty 0..3 starts the score at −70/−40/−10/0 and turns an aggressive rival neutral on Tanto, a
 cautious one neutral on No-Dachi. Temperament by age group (aggressive/neutral/cautious): 50/40/10, 40/40/20,
-30/40/30, 20/40/40, 10/40/50 %. The family advantage adds 32. At rank 1 each rival is rerolled while his score
-is below the player's, and the set is rerolled until the player is fourth; the player's age is then 15.
+30/40/30, 20/40/40, 10/40/50 %. The age group (133F:0006) is rand(10) through the jump table at 133F:012C:
+at rank 1, 20/30/30/10/10 % for groups 1-5 (at rank 2 group 1 becomes 2, at rank 3 groups 1-2 become 3). The player
+draws one too, so a hidden −32..+32 shifts all four starting attributes, and 1E59 then sets the age word (+2, tenths
+of a year) to 0x96, 15 years. The family advantage (shared+30E 0..3 → 1568:05E8 swordsmanship, 0614 generalship,
+0434 honor, 0590 land) adds 32, clamped to 1..128 (honor 1..112), after 133F:063A computed the troops, so the first
+troop count ignores it. At rank 1 the player is rolled first and each rival (all in the player's province, 1C39) is
+rerolled while his score (133F:0D3C) is not above the player's (1D44); the advantage is already in, so an honor
+advantage (+48 score) raises the bar far more than swordsmanship or generalship (+8). The set is rerolled unless
+the player is fourth (1DFA), which the per-rival test already guarantees. Difficulty and name play no part.
 
 The duel's opponent (*code*; the practice captures have equal swordsmanship, a bonus of 0). DUEL 1000:0010: skill =
 clamp(2 × shared+36 + bitlength((unsigned)(shared+6A − shared+68) >> 4), 0, 7), where RP puts the player's
