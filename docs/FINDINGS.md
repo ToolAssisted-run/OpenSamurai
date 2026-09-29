@@ -535,8 +535,12 @@ troop count ignores it. At rank 1 the player is rolled first and each rival (all
 rerolled while his score (133F:0D3C) is not above the player's (1D44); the advantage is already in, so an honor
 advantage (+48 score) raises the bar far more than swordsmanship or generalship (+8). The set is rerolled unless
 the player is fourth (1DFA), which the per-rival test already guarantees. Difficulty and name play no part. The
-ceiling is 128/128/112/128 (honor gift only, the roll caps honor at 96); exact odds over the age group and rolls:
-Sagami 1 in 13,333, Hyuga and Etchu 1 in 19,512, Mino never (land 40). Best expected total: Sagami + honor 308 (troops
+ceiling is 128/128/112/128 (honor gift only: the roll caps honor at 96, a rolled 80+ ends at 112), reachable in 10
+provinces; exact odds over the age group and rolls: Sagami 1 in 4,444, Settsu 1 in 8,889, Hyuga/Etchu/Yamato 1 in
+9,697, Mino never (land 40); with 96 troops too (rolled honor 96) Sagami 1 in 13,333, Hyuga/Etchu 1 in 19,512. A scan
+of all 65,536 RP seeds (srand(ticks), then (ticks & 0xFFF) + 3 rand() calls before 133F:1B40; the harness matches the
+w_V21 capture's four characters) with Hyuga + honor: 9 seeds give the ceiling, 3 with 96 troops (0DFA, 959F, FF94);
+their rivals come out at 108 honor (wife + heir), 128 land, 108 troops. Best expected total: Sagami + honor 308 (troops
 14), Mino + land or honor 306 (16); the best 256-point provinces reach 293 (Hyuga/Etchu + honor, troops 26).
 
 The duel's opponent (*code*; the practice captures have equal swordsmanship, a bonus of 0). DUEL 1000:0010: skill =
