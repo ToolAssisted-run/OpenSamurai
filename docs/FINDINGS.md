@@ -613,6 +613,15 @@ year); age (+02, tenths) + 1; when age % 10 == 0 (years = age / 10): character 4
 −4, ≥ 90 and the player DS:8546 = 1 (only Retire and Seppuku); then swordsmanship and generalship clamped 1..128.
 The lord (5) does not age here.
 
+Marriage (*code*). Courting the announced bride (119E:16FE, DS:7F4A = −1): random(100) < 50 ⇒ window 0xDF (item 0
+= rescue): melee 0008(0x19, 0, 0, 0, DS:05FC[d]); won ⇒ the wedding; fell ⇒ 1568:03B0; ran away ⇒ −32, 0x3A,
+desertion check. Else each rival without a wife (1568:009C = −1, 1568:0FD8 = 0) courts when random(128) ≤ DS:7B32 −
+honor + 96 (he goes to the father, action 0x19); rescore (133F:09CA); the suitors (and the player) in rank order,
+window 0xE0 with their names: the first wins (0xE2 the player, 0xE3 a rival: 23F7:0C88), 0xE1 when the player is
+alone. The wedding 23F7:0D8C: the wife's age clamp(random(26) + 15, 15, the player's years); honor + (DS:7B32 −
+1568:051E(0)) / 2 through 0434, then +4 directly; land − DS:792C (the dowry, DS:7B32 / 4); window 0x9B; the
+desertion checks 1568:0788 and 0818. The offer (23F7 random event): DS:7B32 = 16 × random(6) + 20, 15 turns.
+
 Taking the lord's place (*code*). Usurpation (177D:3132 at the lord's castle): battle 00BA(6, 5, troops, 7ED8)
 lost ⇒ window 0x87 and game over; castle melee 0008(5, 5, 5, 1) with shared+28 cleared for it, player fallen or no
 duel ⇒ (0x3D with the difficulty's odds) 0x87, game over; duel 019E(2, 5, 7EDA) lost ⇒ 0x3D, 0x87, game over; won ⇒
