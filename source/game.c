@@ -903,7 +903,8 @@ static int run_duel(void)
 static uint32_t battle_answer(void *ctx, int what) { return duel_answer(ctx, what); }
 
 // the frame counter (DS:1B44): the timer's callback (1000:6828) counts the frames while INT 8 is BATTLE's
-// 1883:0160; the waits read it in a loop (the time passes as they look)
+// 1883:015F (its handler's sti; the far pointer it installs is at 1883:015B); the waits read it in a loop (the time
+// passes as they look)
 static uint16_t battle_frames(void *ctx)
 {
   (void)ctx;
@@ -913,10 +914,10 @@ static uint16_t battle_frames(void *ctx)
 
 static void battle_timer_frame(void)
 {
-  if (*(uint16_t *)far_ptr(0, 0x20) != 0x0160 || *(uint16_t *)far_ptr(0, 0x22) != 0x304F) return;
+  if (*(uint16_t *)far_ptr(0, 0x20) != 0x015F || *(uint16_t *)far_ptr(0, 0x22) != 0x304F) return;
   (*(uint16_t *)far_ptr(BATTLE_DS, 0x1B44))++;
 }
-static bool battle_hooked(void) { return *(uint16_t *)far_ptr(0, 0x20) == 0x0160 && *(uint16_t *)far_ptr(0, 0x22) == 0x304F; }
+static bool battle_hooked(void) { return *(uint16_t *)far_ptr(0, 0x20) == 0x015F && *(uint16_t *)far_ptr(0, 0x22) == 0x304F; }
 static const ProgTimer battleTimer = { BATTLE_DS, 0x1B2A, 0x1B46, true, battle_hooked, battle_timer_frame };
 
 static int run_battle(void)
