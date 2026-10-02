@@ -22,7 +22,12 @@ void vga_set_mode(u8 mode)
   vga.gc[6] = 0x05;
   vga.gc[7] = 0x0F;
   vga.gc[8] = 0xFF;
-  memcpy(vga.attr, egaPalette, 16);
+  // the palette registers the BIOS sets: in the 200-line modes (0Dh, 0Eh) the CGA's colours, bit 4 the intensity
+  // (00-07, 10-17); in the others the EGA's 64-colour defaults
+  if (mode == 0x0D || mode == 0x0E)
+    for (int k = 0; k < 8; k++) vga.attr[k] = (u8)k, vga.attr[k + 8] = (u8)(k + 0x10);
+  else
+    memcpy(vga.attr, egaPalette, 16);
   vga.attr[0x10] = 0x01;
   vga.attr[0x12] = 0x0F;
   vga.attr[0x14] = 0x00;

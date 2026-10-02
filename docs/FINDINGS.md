@@ -829,6 +829,14 @@ checked against the originals:
   and kept every repeat, so a direction held on the maps, in a duel or in a melee left a train of keys for the next
   menu. It now holds 15 and collapses the repeats at its head at each key event while a handler is hooked
   (game_keyboard_hooked). The handler's buttons (DS:339C/339D: FFh pressed, 0 released, from `cbw / not`) were right.
+- The melee's picture (vga.c): the write modes 0-3 (rotate, set/reset, the function, the bit mask), the read modes
+  with the colour don't-care, the map mask, the start address and its pitch, the colour plane enable and the palette
+  and colour select to the DAC are the hardware's; pixel panning (only EGRAPHIC's uncalled shake step) and the split
+  screen (never set) are left out. The BIOS's mode set made 0Dh as the EGA's 350-line modes (palette registers 00-05,
+  14, 07, 38-3F over a 64-colour rgbRGB DAC); a VGA's BIOS (and DOSBox-X's) makes the 200-line modes CGA-like
+  (00-07, 10-17 over a DAC whose bit 4 is the intensity), and EGRAPHIC writes its palettes that way (a colour 8-15 as
+  (c & 7) | 10h: slots 4, 15, 24). MELEE calls none of them, so the colours were the same; the mode set is the VGA
+  BIOS's now (the melee's frames unchanged, pixel for pixel).
 
 ## 6. Methods
 

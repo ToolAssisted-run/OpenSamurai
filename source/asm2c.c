@@ -84,7 +84,17 @@ void asm_int(u8 n)
     {
       videoMode = al & 0x7F;
       vga_set_mode(al & 0x7F);
-      if (vga.planar)  // the BIOS's DAC for the EGA's modes: the 64 colours (rgbRGB: primary 2/3, secondary 1/3)
+      if (vga.planar && (videoMode == 0x0D || videoMode == 0x0E))
+        // the BIOS's DAC for the 200-line modes: the CGA's 16 colours, bit 4 the intensity (bits 3 and 5 not looked
+        // at; colour 6 brown), as the palette registers say them (vga.c)
+        for (int k = 0; k < 64; k++)
+        {
+          int i = (k >> 4) & 1;
+          asm_dac[k][0] = (u8)(42 * ((k >> 2) & 1) + 21 * i);
+          asm_dac[k][1] = (u8)((k & 7) == 6 && !i ? 21 : 42 * ((k >> 1) & 1) + 21 * i);
+          asm_dac[k][2] = (u8)(42 * (k & 1) + 21 * i);
+        }
+      else if (vga.planar)  // the others': the EGA's 64 colours (rgbRGB: primary 2/3, secondary 1/3)
         for (int k = 0; k < 64; k++)
         {
           asm_dac[k][0] = (u8)(42 * ((k >> 2) & 1) + 21 * ((k >> 5) & 1));
