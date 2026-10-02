@@ -18,6 +18,7 @@
 
 static const MeleeExeHost *host;
 void (*meleeexe_trace)(uint32_t addr);
+void (*meleeexe_cheat)(uint32_t addr);
 static jmp_buf exitJump;
 static bool exitArmed;
 

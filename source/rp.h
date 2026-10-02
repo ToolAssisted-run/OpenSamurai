@@ -58,5 +58,7 @@ extern void (*rp_tickHook)(void);
 
 // Called with the original address (seg << 16 | off, Ghidra's segments) of every function as it is entered
 extern void (*rp_trace)(uint32_t addr);
+// the cheats' hook (cheats.c), at the same function entries
+extern void (*rp_cheat)(uint32_t addr);
 
 #endif

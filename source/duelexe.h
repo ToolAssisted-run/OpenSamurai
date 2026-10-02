@@ -33,5 +33,8 @@ void duel_entry(uint16_t psp, uint16_t ss, uint16_t sp);
 void duel_main(const uint16_t regs[9]);
 
 extern void (*duel_trace)(uint32_t addr);
+// the cheats' hook (cheats.c), at the same function entries: 1 = the function is skipped (the hook popped its
+// return address)
+extern int (*duel_cheat)(uint32_t addr);
 
 #endif

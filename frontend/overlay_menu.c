@@ -37,6 +37,10 @@ The authors of this program may be contacted at https://forum.princed.org
  *    CONTROLS page shows keys; choosing one closes the menu and types its key into the game. Keys with Alt or Ctrl (the
  *    game's commands) close the menu and go to the game, as SDLPoP's Ctrl+ keys. QUIT GAME's confirmation ends the
  *    program.
+ *  - Cheats: SDLPoP's CHEATS pause item (commented out there), as SDLPoP2 made it: a page laid out as the settings
+ *    (CHEATS / BACK, the list on the right, the help line), here of switches and speeds (the host's
+ *    overlay_menu_cheats, which the frontend gives the game: source/cheats.h). They are not saved, as SDLPoP's
+ *    cheats_enabled is not; greyed out without the host's switches.
  *  - Settings: OpenSamurai.ini's (settings.h) on SDLPoP's pages: GENERAL (the sound driver, the volume, the joystick,
  *    the title, the random seed, "Restore defaults..."), VISUALS (fullscreen, 4:3, integer scaling, the scaling
  *    method). The original setup's choices (the sound driver, the joystick, the title) and the random seed are the
@@ -374,6 +378,7 @@ struct pause_menu_item_type {
 enum pause_menu_item_ids {
 	PAUSE_MENU_RESUME,
 	PAUSE_MENU_COMMANDS, // OpenSamurai: the game's commands (SDLPoP2's CHEATS page)
+	PAUSE_MENU_CHEATS, // OpenSamurai: the cheats (SDLPoP's CHEATS, commented out there)
 	PAUSE_MENU_SETTINGS,
 	PAUSE_MENU_QUIT_GAME,
 	SETTINGS_MENU_GENERAL,
@@ -381,13 +386,17 @@ enum pause_menu_item_ids {
 	SETTINGS_MENU_BACK,
 	SETTINGS_MENU_COMMANDS, // OpenSamurai: the COMMANDS page's list
 	COMMANDS_MENU_BACK, // OpenSamurai
+	SETTINGS_MENU_CHEATS, // OpenSamurai: the CHEATS page's list
+	CHEATS_MENU_BACK, // OpenSamurai
 };
 
+static int cheats_available;   // (the host gives the switches)
 static pause_menu_item_type pause_menu_items[] = {
 		{.id = PAUSE_MENU_RESUME,        .text = "RESUME"},
 		// OpenSamurai: SDLPoP's CHEATS item (commented out there) made, as in SDLPoP2, for the game's commands; SDLPoP's
 		// QUICKSAVE, QUICKLOAD, RESTART LEVEL and RESTART GAME have no counterpart
 		{.id = PAUSE_MENU_COMMANDS,      .text = "COMMANDS"},
+		{.id = PAUSE_MENU_CHEATS,        .text = "CHEATS", .required = &cheats_available},
 		{.id = PAUSE_MENU_SETTINGS,      .text = "SETTINGS"},
 		{.id = PAUSE_MENU_QUIT_GAME,     .text = "QUIT GAME"},
 };
@@ -416,6 +425,11 @@ static pause_menu_item_type settings_menu_items[] = {
 static pause_menu_item_type commands_menu_items[] = {
 		{.id = SETTINGS_MENU_COMMANDS, .text = "COMMANDS"},
 		{.id = COMMANDS_MENU_BACK, .text = "BACK"},
+};
+// OpenSamurai: the CHEATS page, laid out the same way
+static pause_menu_item_type cheats_menu_items[] = {
+		{.id = SETTINGS_MENU_CHEATS, .text = "CHEATS"},
+		{.id = CHEATS_MENU_BACK, .text = "BACK"},
 };
 static int active_settings_subsection = 0;
 static int highlighted_settings_subsection = 0;
@@ -452,6 +466,19 @@ enum setting_ids {
 	SETTING_USE_CORRECT_ASPECT_RATIO,
 	SETTING_USE_INTEGER_SCALING,
 	SETTING_SCALING_TYPE,
+	SETTING_CHEAT_INVULNERABLE_MELEE, // OpenSamurai: the CHEATS page
+	SETTING_CHEAT_INVULNERABLE_DUEL,
+	SETTING_CHEAT_INVULNERABLE_TROOPS,
+	SETTING_CHEAT_NEVER_ROUT,
+	SETTING_CHEAT_FASTER_TROOPS,
+	SETTING_CHEAT_WALK_MAP,
+	SETTING_CHEAT_WALK_MELEE,
+	SETTING_CHEAT_STOP_AGEING,
+	SETTING_CHEAT_MAX_HONOR,
+	SETTING_CHEAT_MAX_TROOPS,
+	SETTING_CHEAT_MAX_LAND,
+	SETTING_CHEAT_MAX_SWORDSMANSHIP,
+	SETTING_CHEAT_MAX_GENERALSHIP,
 	SETTING_COMMAND_FIRST, // OpenSamurai: the COMMANDS page's entries (SETTING_COMMAND_FIRST + their index in `commands`)
 };
 
@@ -472,6 +499,7 @@ typedef struct setting_type {
 	size_t link;
 	const char* ini;
 	const char* const* ini_values;
+	size_t cheat; // OpenSamurai: where the switch is in overlay_menu_cheats (offset + 1; 0: none)
 } setting_type;
 #define LINK(field) .link = offsetof(os_settings, field) + 1
 
@@ -546,6 +574,60 @@ static setting_type visuals_settings[] = {
 						"Blurry - Use smooth scaling."},
 };
 
+// OpenSamurai: the CHEATS page: the host's switches (overlay_menu_cheats, `cheat` = the field), each a toggle or a
+// speed (0..3: 1x, 2x, 4x, 8x)
+#define CHEAT(field) .cheat = offsetof(overlay_menu_cheats, field) + 1
+NAMES_LIST(speed_setting_names, {"1x", "2x", "4x", "8x",});
+static setting_type cheats_settings[] = {
+		{.id = SETTING_CHEAT_INVULNERABLE_MELEE, .style = SETTING_STYLE_TOGGLE, CHEAT(invulnerableMelee), .required = &cheats_available,
+				.text = "Invulnerable (melee)",
+				.explanation = "Blows and arrows never wound you in melees (the game's own debug switch).\n"
+						"You still stagger when hit."},
+		{.id = SETTING_CHEAT_INVULNERABLE_DUEL, .style = SETTING_STYLE_TOGGLE, CHEAT(invulnerableDuel), .required = &cheats_available,
+				.text = "Invulnerable (duel)",
+				.explanation = "Your opponent's blows never wound you or knock you back in duels."},
+		{.id = SETTING_CHEAT_INVULNERABLE_TROOPS, .style = SETTING_STYLE_TOGGLE, CHEAT(invulnerableTroops), .required = &cheats_available,
+				.text = "Invulnerable troops (battle)",
+				.explanation = "Your units lose no men to the enemy's attacks in battles."},
+		{.id = SETTING_CHEAT_NEVER_ROUT, .style = SETTING_STYLE_TOGGLE, CHEAT(troopsNeverRout), .required = &cheats_available,
+				.text = "Troops never rout (battle)",
+				.explanation = "Your units never break and flee on their own in battles.\n"
+						"R still orders the retreat."},
+		{.id = SETTING_CHEAT_FASTER_TROOPS, .style = SETTING_STYLE_NUMBER, .number_type = SETTING_INT, .max = 3,
+				CHEAT(fasterTroops), .names_list = &speed_setting_names_list, .required = &cheats_available,
+				.text = "Faster troops (battle)",
+				.explanation = "Your units march and turn faster in battles (the enemy's do not)."},
+		{.id = SETTING_CHEAT_WALK_MAP, .style = SETTING_STYLE_NUMBER, .number_type = SETTING_INT, .max = 3,
+				CHEAT(walkMap), .names_list = &speed_setting_names_list, .required = &cheats_available,
+				.text = "Faster walk (map)",
+				.explanation = "Walk faster on the province maps.\n"
+						"Encounters come every few seconds, so a trip brings fewer of them."},
+		{.id = SETTING_CHEAT_WALK_MELEE, .style = SETTING_STYLE_NUMBER, .number_type = SETTING_INT, .max = 3,
+				CHEAT(walkMelee), .names_list = &speed_setting_names_list, .required = &cheats_available,
+				.text = "Faster walk (melee)",
+				.explanation = "You walk faster in melees (the others do not)."},
+		{.id = SETTING_CHEAT_STOP_AGEING, .style = SETTING_STYLE_TOGGLE, CHEAT(stopAgeing), .required = &cheats_available,
+				.text = "Stop ageing",
+				.explanation = "You and your family stop ageing.\n"
+						"Your rivals, the lords and their families age as usual."},
+		{.id = SETTING_CHEAT_MAX_HONOR, .style = SETTING_STYLE_TOGGLE, CHEAT(maxHonor), .required = &cheats_available,
+				.text = "Max honor",
+				.explanation = "Your honor held at 128, the most the game allows\n"
+						"(112, plus 16 from a wife, an heir and two more children)."},
+		{.id = SETTING_CHEAT_MAX_TROOPS, .style = SETTING_STYLE_TOGGLE, CHEAT(maxTroops), .required = &cheats_available,
+				.text = "Max troops",
+				.explanation = "Your troops held at 128, the most the game allows."},
+		{.id = SETTING_CHEAT_MAX_LAND, .style = SETTING_STYLE_TOGGLE, CHEAT(maxLand), .required = &cheats_available,
+				.text = "Max land",
+				.explanation = "Your land held at 128, the most the game allows."},
+		{.id = SETTING_CHEAT_MAX_SWORDSMANSHIP, .style = SETTING_STYLE_TOGGLE, CHEAT(maxSwordsmanship), .required = &cheats_available,
+				.text = "Max swordsmanship",
+				.explanation = "Your swordsmanship held at 128, the most the game allows."},
+		{.id = SETTING_CHEAT_MAX_GENERALSHIP, .style = SETTING_STYLE_TOGGLE, CHEAT(maxGeneralship), .required = &cheats_available,
+				.text = "Max generalship",
+				.explanation = "Your generalship held at 128, the most the game allows."},
+};
+
 // OpenSamurai: the COMMANDS page: the original game's command keys (README's keys), one line each: the BIOS's key
 // (overlay_menu_key_label shows it), the line on the page, the help line. Chosen, the key is typed into the game.
 typedef struct command_type {
@@ -575,6 +657,7 @@ typedef struct settings_area_type {
 static settings_area_type general_settings_area = { .settings = general_settings, .setting_count = COUNT(general_settings)};
 static settings_area_type visuals_settings_area = { .settings = visuals_settings, .setting_count = COUNT(visuals_settings)};
 static settings_area_type commands_settings_area = { .settings = commands_settings, .setting_count = COUNT(commands_settings)}; // OpenSamurai
+static settings_area_type cheats_settings_area = { .settings = cheats_settings, .setting_count = COUNT(cheats_settings)}; // OpenSamurai
 
 static settings_area_type* get_settings_area(int menu_item_id) {
 	switch(menu_item_id) {
@@ -586,6 +669,8 @@ static settings_area_type* get_settings_area(int menu_item_id) {
 			return &visuals_settings_area;
 		case SETTINGS_MENU_COMMANDS: // OpenSamurai
 			return &commands_settings_area;
+		case SETTINGS_MENU_CHEATS: // OpenSamurai
+			return &cheats_settings_area;
 	}
 }
 static settings_area_type* const all_settings_areas[] = {   // (saving, restoring the defaults)
@@ -613,6 +698,7 @@ static void init_settings_list(setting_type* first_setting, int setting_count) {
 			item->previous = (first_setting + MAX(0, i-1))->id;
 			item->next = (first_setting + MIN(setting_count-1, i+1))->id;
 			if (item->link) item->linked = (char*) S + (item->link - 1);   // (the frontend's settings)
+			if (item->cheat && host.cheats) item->linked = (char*) host.cheats + (item->cheat - 1);   // (its cheats)
 		}
 	}
 }
@@ -655,11 +741,13 @@ static void init_menu(void) {
 	init_pause_menu_items(pause_menu_items, COUNT(pause_menu_items));
 	init_pause_menu_items(settings_menu_items, COUNT(settings_menu_items));
 	init_pause_menu_items(commands_menu_items, COUNT(commands_menu_items)); // OpenSamurai
+	init_pause_menu_items(cheats_menu_items, COUNT(cheats_menu_items)); // OpenSamurai
 
 	init_settings_list(general_settings, COUNT(general_settings));
 	init_settings_list(visuals_settings, COUNT(visuals_settings));
 	init_commands_settings(); // OpenSamurai
 	init_settings_list(commands_settings, COUNT(commands_settings));
+	init_settings_list(cheats_settings, COUNT(cheats_settings)); // OpenSamurai
 }
 
 static bool_type is_mouse_over_rect(const rect_type* rect) {
@@ -732,6 +820,12 @@ static void pause_menu_clicked(pause_menu_item_type* item) {
 			enter_settings_subsection(SETTINGS_MENU_COMMANDS);
 			scroll_position = MAX(0, highlighted_setting_id - SETTING_COMMAND_FIRST - 8);
 			break;
+		case PAUSE_MENU_CHEATS:
+			// OpenSamurai: the CHEATS page (drawn as the settings page), the list in focus
+			drawn_menu = 3;
+			hovering_pause_menu_item = SETTINGS_MENU_CHEATS;
+			enter_settings_subsection(SETTINGS_MENU_CHEATS);
+			break;
 		case PAUSE_MENU_SETTINGS:
 			drawn_menu = 1;
 			hovering_pause_menu_item = SETTINGS_MENU_GENERAL;
@@ -746,7 +840,13 @@ static void pause_menu_clicked(pause_menu_item_type* item) {
 		case SETTINGS_MENU_GENERAL:
 		case SETTINGS_MENU_VISUALS:
 		case SETTINGS_MENU_COMMANDS: // OpenSamurai
+		case SETTINGS_MENU_CHEATS: // OpenSamurai
 			enter_settings_subsection(item->id);
+			break;
+		case CHEATS_MENU_BACK: // OpenSamurai
+			reset_paused_menu();
+			active_settings_subsection = highlighted_settings_subsection = 0;
+			hovering_pause_menu_item = PAUSE_MENU_CHEATS;
 			break;
 		case COMMANDS_MENU_BACK: // OpenSamurai
 			reset_paused_menu();
@@ -807,7 +907,7 @@ static void draw_pause_menu_item(pause_menu_item_type* item, rect_type* parent, 
 			if (is_mouse_over_rect(&selection_box)) {
 				pause_menu_clicked(item);
 			}
-		} else if (pressed_enter && (drawn_menu == 0 || (drawn_menu >= 1 && controlled_area == 0))) { // (2: the COMMANDS page)
+		} else if (pressed_enter && (drawn_menu == 0 || (drawn_menu >= 1 && controlled_area == 0))) { // (2: the COMMANDS page, 3 the CHEATS page)
 			pause_menu_clicked(item);
 		}
 
@@ -856,12 +956,12 @@ static int setting_apply_group(int setting_id) {
 // (SDLPoP2's) the random seed setting as the menu shows it: -1 the clock, else the number (shown up to 99999)
 static int seed_setting_get(const os_settings* s) { return s->random_seed_clock ? -1 : s->random_seed > 99999 ? 99999 : (int) s->random_seed; }
 static void apply_setting(setting_type* setting) {
-	int what = setting_apply_group(setting->id);
+	int what = setting->cheat ? OVERLAY_MENU_APPLY_CHEATS : setting_apply_group(setting->id);
 	if (what && host.apply) host.apply(what);
 }
 
 static void turn_setting_on_off(setting_type* setting, byte new_state) {
-	were_settings_changed = 1;
+	if (!setting->cheat) were_settings_changed = 1;   // (the cheats: nothing to save)
 	if (setting->linked != NULL) {
 		*(int*)(setting->linked) = new_state;
 	}
@@ -933,7 +1033,7 @@ static void set_setting_value(setting_type* setting, int value) {
 static void increase_setting(setting_type* setting, int old_value) {
 	int new_value = old_value + 1;
 	if (setting->linked != NULL && new_value <= setting->max) {
-		were_settings_changed = 1;
+		if (!setting->cheat) were_settings_changed = 1;
 		set_setting_value(setting, new_value);
 	}
 }
@@ -941,7 +1041,7 @@ static void increase_setting(setting_type* setting, int old_value) {
 static void decrease_setting(setting_type* setting, int old_value) {
 	int new_value = old_value - 1;
 	if (setting->linked != NULL && new_value >= setting->min) {
-		were_settings_changed = 1;
+		if (!setting->cheat) were_settings_changed = 1;
 		set_setting_value(setting, new_value);
 	}
 }
@@ -1270,9 +1370,9 @@ static void draw_settings_menu(void) {
 		}
 	}
 
-	// OpenSamurai: the COMMANDS page has its own left part
-	pause_menu_item_type* left_items = (drawn_menu == 2) ? commands_menu_items : settings_menu_items;
-	int left_item_count = (drawn_menu == 2) ? COUNT(commands_menu_items) : COUNT(settings_menu_items);
+	// OpenSamurai: the COMMANDS and CHEATS pages have their own left parts
+	pause_menu_item_type* left_items = drawn_menu == 2 ? commands_menu_items : drawn_menu == 3 ? cheats_menu_items : settings_menu_items;
+	int left_item_count = drawn_menu == 2 ? COUNT(commands_menu_items) : drawn_menu == 3 ? COUNT(cheats_menu_items) : COUNT(settings_menu_items);
 	int y_offset = 50;
 	for (int i = 0; i < left_item_count; ++i) {
 		pause_menu_item_type* item = &left_items[i];
@@ -1423,12 +1523,13 @@ static void draw_menu_pass(void) {
 				reset_paused_menu(); // Go back to the top level pause menu.
 				hovering_pause_menu_item = PAUSE_MENU_SETTINGS;
 			}
-		} else if (drawn_menu == 2) { // OpenSamurai: the COMMANDS page, as the settings page
+		} else if (drawn_menu == 2 || drawn_menu == 3) { // OpenSamurai: the COMMANDS and CHEATS pages, as the settings page
 			if (controlled_area == 1) {
 				leave_settings_subsection();
 			} else {
+				int back_to = drawn_menu == 2 ? PAUSE_MENU_COMMANDS : PAUSE_MENU_CHEATS;
 				reset_paused_menu();
-				hovering_pause_menu_item = PAUSE_MENU_COMMANDS;
+				hovering_pause_menu_item = back_to;
 			}
 		} else {
 			need_close_menu = 1; // Close the menu.
@@ -1455,7 +1556,7 @@ static void draw_menu_pass(void) {
 		textstate.ptr_font = hc_small_font;
 		if (drawn_menu == 0) {
 			draw_pause_menu();
-		} else if (drawn_menu == 1 || drawn_menu == 2) { // (2: the COMMANDS page, drawn as the settings)
+		} else if (drawn_menu >= 1) { // (2: the COMMANDS page, 3: the CHEATS page, drawn as the settings)
 			draw_settings_menu();
 		}
 		textstate.ptr_font = saved_font;
@@ -1754,6 +1855,7 @@ static void menu_was_closed(void) {
 void overlay_menu_init(const overlay_menu_host* menu_host) {
 	host = *menu_host;
 	S = host.settings;
+	cheats_available = host.cheats != NULL;
 	overlay_color_count = 0;
 	for (int i = 0; i < 16; ++i) {
 		map_rgba(vga_palette_default[i][0] << 2, vga_palette_default[i][1] << 2, vga_palette_default[i][2] << 2, 255);
@@ -1941,6 +2043,10 @@ void overlay_menu_state(int* page, const char** item, const char** subsection, c
 	for (int i = 0; i < COUNT(commands_menu_items); ++i) {
 		if (commands_menu_items[i].id == hovering_pause_menu_item) *item = commands_menu_items[i].text;
 		if (commands_menu_items[i].id == active_settings_subsection) *subsection = commands_menu_items[i].text;
+	}
+	for (int i = 0; i < COUNT(cheats_menu_items); ++i) {
+		if (cheats_menu_items[i].id == hovering_pause_menu_item) *item = cheats_menu_items[i].text;
+		if (cheats_menu_items[i].id == active_settings_subsection) *subsection = cheats_menu_items[i].text;
 	}
 	settings_area_type* area = get_settings_area(active_settings_subsection);
 	if (area != NULL && controlled_area == 1) {

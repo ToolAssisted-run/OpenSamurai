@@ -6,7 +6,8 @@
 //  3. settings: a number (the volume) and toggles changed and applied through the frontend's hook; the random seed
 //     typed in and reset with Delete; "Restore defaults..."; saved to OpenSamurai.cfg when the menu closes and read
 //     back by SDLPoP's rule (not when the ini is newer);
-//  4. COMMANDS: an entry chosen closes the menu with its key; a key with Alt closes it for the game;
+//  4. COMMANDS: an entry chosen closes the menu with its key; a key with Alt closes it for the game; CHEATS: a toggle
+//     and a speed changed and applied through the frontend's hook, never saved to OpenSamurai.cfg;
 //  5. the quit confirmation (Cancel, then OK), the mouse (a click on an item, the right button backs out), the
 //     controller (the D-pad, A, B);
 //  6. OpenSamurai.ini's parser: every option, "default", bad values and unknown keys reported.
@@ -25,6 +26,7 @@ static int failures;
 #define CHECK(c, ...) do { if (!(c)) { failures++; printf("FAIL: " __VA_ARGS__); printf("\n"); } else if (getenv("VERBOSE")) { printf("ok: " __VA_ARGS__); printf("\n"); } } while (0)
 
 static os_settings S;
+static overlay_menu_cheats C;
 static int applied, action;
 static uint32_t padHeld;
 static int padPlugged;
@@ -96,7 +98,7 @@ static int dialog_now(void)
 // from the pause menu's RESUME to a settings page's first setting
 static void to_settings_page(int page)
 {
-  tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_RETURN);  // SETTINGS
+  tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_RETURN);  // SETTINGS
   for (int k = 0; k < page; k++) tap(SDL_SCANCODE_DOWN);
   tap(SDL_SCANCODE_RETURN);
 }
@@ -116,7 +118,7 @@ int main(int argc, char **argv)
   snprintf(ini, sizeof ini, "%s/menutest.ini", argv[1]);
   remove(cfg);
   settings_defaults(&S);
-  overlay_menu_host host = { &S, NULL, NULL, apply, pad, "" };
+  overlay_menu_host host = { &S, NULL, NULL, apply, pad, "", &C };
   snprintf(host.cfg_path, sizeof host.cfg_path, "%s", cfg);
   overlay_menu_init(&host);
 
@@ -174,7 +176,7 @@ int main(int argc, char **argv)
   CHECK(!strcmp(item_now(), "QUIT GAME"), "up from RESUME wraps to QUIT GAME (%s)", item_now());
   tap(SDL_SCANCODE_DOWN);
   CHECK(!strcmp(item_now(), "RESUME"), "and down back to RESUME (%s)", item_now());
-  tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_RETURN);
+  tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_RETURN);
   CHECK(!strcmp(item_now(), "GENERAL"), "SETTINGS: GENERAL (%s)", item_now());
   tap(SDL_SCANCODE_DOWN);
   CHECK(!strcmp(item_now(), "VISUALS"), "VISUALS (%s)", item_now());
@@ -274,6 +276,31 @@ int main(int argc, char **argv)
   uint16_t mod;
   overlay_menu_key(&sc, &mod);
   CHECK(!overlay_menu_is_open() && action == OVERLAY_MENU_KEY && sc == SDL_SCANCODE_V && (mod & KMOD_ALT), "Alt+V closes the menu, for the game");
+  // the CHEATS page
+  applied = 0;
+  remove(cfg);
+  tap(SDL_SCANCODE_F4);
+  tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN);
+  CHECK(!strcmp(item_now(), "CHEATS"), "CHEATS (%s)", item_now());
+  tap(SDL_SCANCODE_RETURN);
+  CHECK(!strcmp(setting_now(), "Invulnerable (melee)"), "CHEATS: Invulnerable (melee) first (%s)", setting_now());
+  tap(SDL_SCANCODE_RIGHT);
+  CHECK(C.invulnerableMelee == 1 && (applied & OVERLAY_MENU_APPLY_CHEATS), "Invulnerable (melee) on, applied (%d)", applied);
+  tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN);
+  CHECK(!strcmp(setting_now(), "Faster troops (battle)"), "Faster troops (%s)", setting_now());
+  tap(SDL_SCANCODE_RIGHT), tap(SDL_SCANCODE_RIGHT), tap(SDL_SCANCODE_RIGHT), tap(SDL_SCANCODE_RIGHT);
+  CHECK(C.fasterTroops == 3, "Faster troops: 8x at most (%d)", C.fasterTroops);
+  tap(SDL_SCANCODE_END);
+  CHECK(!strcmp(setting_now(), "Max generalship"), "Max generalship last (%s)", setting_now());
+  tap(SDL_SCANCODE_RIGHT);
+  CHECK(C.maxGeneralship == 1, "Max generalship on");
+  tap(SDL_SCANCODE_F4);
+  CHECK(stat(cfg, &st) != 0, "the cheats are not saved: no OpenSamurai.cfg");
+  tap(SDL_SCANCODE_F4);
+  tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_RETURN);
+  tap(SDL_SCANCODE_ESCAPE), tap(SDL_SCANCODE_ESCAPE);
+  CHECK(!strcmp(item_now(), "CHEATS") && overlay_menu_is_open(), "Esc, Esc: back to the pause menu at CHEATS (%s)", item_now());
+  tap(SDL_SCANCODE_F4);
   char label[32];
   overlay_menu_key_label(0x3D00, label, sizeof label);
   CHECK(!strcmp(label, "F3"), "0x3D00 is F3 (%s)", label);
@@ -289,7 +316,7 @@ int main(int argc, char **argv)
   tap(SDL_SCANCODE_RETURN), tap(SDL_SCANCODE_RETURN);
   CHECK(!overlay_menu_is_open() && action == OVERLAY_MENU_QUIT, "OK: the frontend quits (%d)", action);
   tap(SDL_SCANCODE_F4);
-  mouse(SDL_BUTTON_LEFT, 160, 83);  // SETTINGS (the items from y 55, 13 apart)
+  mouse(SDL_BUTTON_LEFT, 160, 96);  // SETTINGS (the items from y 55, 13 apart)
   CHECK(!strcmp(item_now(), "GENERAL"), "a click on SETTINGS (%s)", item_now());
   mouse(SDL_BUTTON_RIGHT, 0, 0);
   CHECK(!strcmp(item_now(), "SETTINGS"), "the right button: back (%s)", item_now());

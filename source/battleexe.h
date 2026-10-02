@@ -34,5 +34,7 @@ void battle_entry(uint16_t psp, uint16_t ss, uint16_t sp);
 void battle_main(const uint16_t regs[9]);
 
 extern void (*battle_trace)(uint32_t addr);
+// the cheats' hook (cheats.c), at the same function entries
+extern void (*battle_cheat)(uint32_t addr);
 
 #endif

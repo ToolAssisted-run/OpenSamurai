@@ -23,7 +23,7 @@ The development build is rebuilt after every change. If you want a build that ne
 
 The game asks the original's crest question at the start, so keep the manual at hand. Saved games (Alt+S at the Home Option scroll) go to the game's folder, as in the original. The keys are listed below.
 
-F4 opens OpenSamurai's in-game menu, where you can change the settings and find the game's commands. The game waits while the menu is open.
+F4 opens OpenSamurai's in-game menu, where you can change the settings, turn on cheats and find the game's commands. The game waits while the menu is open.
 
 Found a bug or a glitch, or have an idea? Everything is welcome on the [issues page](https://github.com/ToolAssisted-run/OpenSamurai/issues).
 
@@ -47,7 +47,7 @@ Found a bug or a glitch, or have an idea? Everything is welcome on the [issues p
 
 | | |
 |---|---|
-| F4, or a click of the left mouse button | the in-game menu: settings, the game's commands, quit (the game waits while it is open) |
+| F4, or a click of the left mouse button | the in-game menu: the game's commands, cheats, settings, quit (the game waits while it is open) |
 | Alt+Enter | fullscreen on or off |
 
 In the menu, the arrows move, Enter chooses, and Esc or the right mouse button goes back. F4 closes it.
@@ -100,6 +100,25 @@ In the menu, the arrows move, Enter chooses, and Esc or the right mouse button g
 A joystick or game controller that is plugged in is the game's joystick. OpenSamurai does the setup's calibration for you, and Alt+J calibrates it again. `/NJ` leaves it out.
 
 A game controller's Start or Back button opens the in-game menu. In the menu, the D-pad or the left stick moves, A chooses, and B goes back.
+
+## Cheats
+
+The in-game menu's CHEATS page turns these on and off at any time. They are not saved: each start begins without them.
+
+| Cheat | What it does |
+|---|---|
+| Invulnerable (melee) | Blows and arrows never wound you in melees. This is the game's own debug switch, which the original never turns on; you still stagger when hit. |
+| Invulnerable (duel) | Your opponent's blows never wound you or knock you back in duels. |
+| Invulnerable troops (battle) | Your units lose no men to the enemy's attacks. |
+| Troops never rout (battle) | Your units never break and flee on their own. R still orders the retreat. |
+| Faster troops (battle) | Your units march and turn 2, 4 or 8 times as fast; the enemy's do not. |
+| Faster walk (map) | You walk 2, 4 or 8 times as fast on the province maps. The game rolls for an encounter every few seconds, so a trip brings fewer of them. |
+| Faster walk (melee) | You walk 2, 4 or 8 times as fast in melees; the others do not. |
+| Stop ageing | You and your family stop ageing. Your rivals, the lords and their families age as usual. |
+| Max honor | Your honor stays at 128, the most the game allows: its honor routine caps honor at 112 and adds up to 16 for a wife (4), an heir (8) and two more children (2 each). |
+| Max troops, Max land, Max swordsmanship, Max generalship | Each stays at 128, the most the game allows. |
+
+No cheat skips or changes the copy protection or its consequences.
 
 ## Command line
 
@@ -175,6 +194,7 @@ The tests that play the game need the game's files, which are not in this reposi
 
 - `source/`: the game. Each original program is rebuilt whole (`start_core.c`, `rp_core.c`, `duelexe_core.c`, `battleexe_core.c`, `meleeexe_core.c`), with the duel, battle and melee simulations in readable C (`duel.c`, `battle.c`, `melee_core.c`), the sound drivers (`isound.c`, `tsound.c`, `asound.c`, `rsound.c`) and models of the chips they drive.
 - `frontend/`: the [SDL2](https://www.libsdl.org) frontend, with SDLPoP's in-game menu (`overlay_menu.c`) and the settings (`settings.c`, `OpenSamurai.ini`).
+- `source/cheats.c`: the cheats, each at a known place in the original programs.
 - `docs/FINDINGS.md`: the reconstruction, program by program, and the game's rules as the code has them.
 - `tools/` and `tests/`: helpers and the test suites.
 

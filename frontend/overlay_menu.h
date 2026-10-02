@@ -1,5 +1,5 @@
-// SDLPoP's in-game menu (overlay_menu.c, by way of SDLPoP2): the pause menu (resume, the game's commands, settings,
-// quit) and the settings screen (general, visuals) over the game's picture, dimmed; keyboard, mouse and game
+// SDLPoP's in-game menu (overlay_menu.c, by way of SDLPoP2): the pause menu (resume, the game's commands, cheats,
+// settings, quit) and the settings screen (general, visuals) over the game's picture, dimmed; keyboard, mouse and game
 // controllers. The settings are OpenSamurai.ini's (settings.h), edited in place, applied at once (or, for the setup's
 // choices, at the next start) and saved to OpenSamurai.cfg when the menu closes (SDLPoP's SDLPoP.cfg mechanism).
 //
@@ -20,6 +20,7 @@ enum
   OVERLAY_MENU_APPLY_VIDEO = 1,       // use_correct_aspect_ratio, use_integer_scaling, scaling_type
   OVERLAY_MENU_APPLY_FULLSCREEN = 2,  // start_fullscreen: the window goes to it now (SDLPoP's)
   OVERLAY_MENU_APPLY_AUDIO = 4,       // volume
+  OVERLAY_MENU_APPLY_CHEATS = 8,      // overlay_menu_cheats (not settings: not saved)
 };
 // what overlay_menu_frame asks of the frontend
 enum
@@ -29,6 +30,14 @@ enum
   OVERLAY_MENU_KEY,      // a key with Alt or Ctrl closed the menu: overlay_menu_key() gives it, for the game
   OVERLAY_MENU_COMMAND,  // a COMMANDS entry was chosen (the menu closed): type overlay_menu_command_key() into the game
 };
+
+// the CHEATS page's switches (the frontend gives them to the game: source/cheats.h); the speeds are 0..3 for 1x, 2x,
+// 4x, 8x
+typedef struct overlay_menu_cheats
+{
+  int invulnerableMelee, invulnerableDuel, invulnerableTroops, troopsNeverRout, fasterTroops, walkMap, walkMelee,
+      stopAgeing, maxHonor, maxTroops, maxLand, maxSwordsmanship, maxGeneralship;
+} overlay_menu_cheats;
 
 typedef struct overlay_menu_host
 {
@@ -40,6 +49,7 @@ typedef struct overlay_menu_host
   // 0 none (NULL: none)
   int (*controller)(uint32_t *held, int *x, int *y);
   char cfg_path[1024];     // OpenSamurai.cfg: where the menu saves its settings ("": nowhere)
+  overlay_menu_cheats *cheats;  // the CHEATS page's switches, edited in place (NULL: no CHEATS page)
 } overlay_menu_host;
 
 void overlay_menu_init(const overlay_menu_host *host);
@@ -58,7 +68,7 @@ void overlay_menu_key(SDL_Scancode *key, uint16_t *mod);  // the key of OVERLAY_
 int overlay_menu_command_key(void);  // the BIOS's key (scan code << 8 | ASCII) of the COMMANDS entry chosen
 // a BIOS key as the COMMANDS page shows it: 0x3B00 "F1", 0x1F00 "Alt+S"
 void overlay_menu_key_label(int code, char *out, size_t n);
-// (tests) the page (0 the pause menu, 1 the settings, 2 the commands), the item under the cursor, the settings page
+// (tests) the page (0 the pause menu, 1 the settings, 2 the commands, 3 the cheats), the item under the cursor, the settings page
 // shown ("GENERAL", ...; "" none), the setting highlighted there ("" none), the dialog showing (0 none)
 void overlay_menu_state(int *page, const char **item, const char **subsection, const char **setting, int *dialog);
 void overlay_menu_close(void);  // (the program ends with the menu open) closed as by RESUME: the settings saved

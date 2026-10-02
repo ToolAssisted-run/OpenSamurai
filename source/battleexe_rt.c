@@ -18,6 +18,7 @@
 
 static const BattleHost *host;
 void (*battle_trace)(uint32_t addr);
+void (*battle_cheat)(uint32_t addr);
 static jmp_buf exitJump;
 static bool exitArmed;
 

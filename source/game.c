@@ -4,6 +4,7 @@
 // the action games by the exit codes. Here the setup's choices are VGA, the host's joystick if it has one, and the
 // host's sound driver.
 #include "game.h"
+#include "cheats.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -399,6 +400,7 @@ static void frame_step(void)
   game_frames++;
   if (tNow < end) tNow = end;
   synced = false;
+  if (timer && timer->ds == 0x41E2) cheats_rp_frame();  // (RP's data segment: RP runs)
   host->present(host->ctx);
   nextFrame += FRAME_US;
   audio_until(end);
@@ -761,6 +763,7 @@ static void rp_frame_poll(void *ctx, uint8_t flag)
 {
   (void)ctx;
   (void)flag;
+  if (cheats_rp_walk_step()) return;  // (the faster walk: this step needs no frame)
   frame();
 }
 
@@ -1036,6 +1039,7 @@ int game_run(const GameHost *h)
   asm_sound_slot = sound_slot;
   asm_idle_hook = frame;  // (a driver waiting for its tick: the next frame's interrupts)
   asm_misc_slot = haveJoystick ? misc_slot : NULL;
+  rp_cheat = cheats_rp_fn, duel_cheat = cheats_duel_fn, battle_cheat = cheats_battle_fn, meleeexe_cheat = cheats_melee_fn;
   if (haveJoystick) joystick_calibrate();
   int code = run_start();
   // the launcher: RP and its exit codes (1-3 the action games, which RP runs itself while it hibernates: see
@@ -1050,5 +1054,6 @@ int game_run(const GameHost *h)
   asm_sound_slot = NULL;
   asm_idle_hook = NULL;
   asm_misc_slot = NULL;
+  rp_cheat = NULL, duel_cheat = NULL, battle_cheat = NULL, meleeexe_cheat = NULL;
   return code;
 }

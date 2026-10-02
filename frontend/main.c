@@ -19,6 +19,7 @@
 #include "game.h"
 #include "rp.h"
 #include "start.h"
+#include "cheats.h"
 #include "overlay_menu.h"
 #include "settings.h"
 
@@ -436,10 +437,34 @@ static void setup_video(void)
   }
 }
 
+// OPENSAMURAI_PEEK="FRAME:SEG:OFF:LEN ..." (hexadecimal but FRAME): memory at those frames, on the error output
+// (scripted runs, debugging)
+static const char *scriptPeek;
+static void peek(long n)
+{
+  for (const char *p = scriptPeek; p && *p;)
+  {
+    char *q;
+    long f = strtol(p, &q, 10);
+    unsigned seg, off, len;
+    if (q == p || sscanf(q, ":%x:%x:%x", &seg, &off, &len) != 3) break;
+    if (f == n)
+    {
+      fprintf(stderr, "peek %ld %04X:%04X", n, seg, off);
+      for (unsigned k = 0; k < len; k++) fprintf(stderr, " %02X", *far_ptr((uint16_t)seg, (uint16_t)(off + k)));
+      fprintf(stderr, "\n");
+    }
+    p = strchr(q, ' ');
+    if (!p) break;
+    while (*p == ' ') p++;
+  }
+}
+
 static void present(void *ctx)
 {
   (void)ctx;
   frameCount++;
+  peek(frameCount);
   typed_release();
   unsigned k;
   if (listed(scriptKeys, frameCount, &k)) key_push((uint16_t)k);
@@ -793,9 +818,28 @@ static void menu_run(void)
   joyHeld = true;
 }
 
+// the CHEATS page's switches, and the game's (source/cheats.h): the speeds 0..3 there, 1, 2, 4, 8 here
+static overlay_menu_cheats menuCheats;
+static int speed_index(int k) { return k >= 8 ? 3 : k >= 4 ? 2 : k >= 2 ? 1 : 0; }
+static void cheats_to_menu(void)
+{
+  menuCheats = (overlay_menu_cheats){ game_cheats.invulnerableMelee, game_cheats.invulnerableDuel, game_cheats.invulnerableTroops,
+                                      game_cheats.troopsNeverRout, speed_index(game_cheats.fasterTroops), speed_index(game_cheats.walkMap),
+                                      speed_index(game_cheats.walkMelee), game_cheats.stopAgeing, game_cheats.maxHonor,
+                                      game_cheats.maxTroops, game_cheats.maxLand, game_cheats.maxSwordsmanship, game_cheats.maxGeneralship };
+}
+static void cheats_from_menu(void)
+{
+  game_cheats = (GameCheats){ menuCheats.invulnerableMelee, menuCheats.invulnerableDuel, menuCheats.invulnerableTroops,
+                              menuCheats.troopsNeverRout, 1 << menuCheats.fasterTroops, 1 << menuCheats.walkMap, 1 << menuCheats.walkMelee,
+                              menuCheats.stopAgeing, menuCheats.maxHonor, menuCheats.maxTroops, menuCheats.maxLand,
+                              menuCheats.maxSwordsmanship, menuCheats.maxGeneralship };
+}
+
 // how the menu's settings take effect (overlay_menu_host.apply); the volume is read as the sound goes out
 static void menu_apply(int what)
 {
+  if (what & OVERLAY_MENU_APPLY_CHEATS) cheats_from_menu();
   if (what & OVERLAY_MENU_APPLY_FULLSCREEN) SDL_SetWindowFullscreen(window, S.start_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
   if (what & OVERLAY_MENU_APPLY_VIDEO) setup_video();
 }
@@ -825,6 +869,37 @@ static int settings_files(const char *gameDir, char *ini, size_t iniSize, char *
   else if (!slash) snprintf(cfg, cfgSize, "OpenSamurai.cfg");
   else snprintf(cfg, cfgSize, "%.*sOpenSamurai.cfg", (int)(slash - ini + 1), ini);
   return ini[0] && settings_load(&S, ini, warn_ini);
+}
+
+// OPENSAMURAI_CHEATS="NAME[=N] ...": cheats on from the start (scripted runs; the in-game menu's CHEATS page sets
+// them otherwise): invulnerable_melee, invulnerable_duel, invulnerable_troops, never_rout, faster_troops=N, walk_map=N,
+// walk_melee=N (N 1, 2, 4 or 8), stop_ageing, max_honor, max_troops, max_land, max_swordsmanship, max_generalship
+static void script_cheats(const char *list)
+{
+  static const struct { const char *name; int *on; } names[] = {
+    { "invulnerable_melee", &game_cheats.invulnerableMelee }, { "invulnerable_duel", &game_cheats.invulnerableDuel },
+    { "invulnerable_troops", &game_cheats.invulnerableTroops }, { "never_rout", &game_cheats.troopsNeverRout },
+    { "faster_troops", &game_cheats.fasterTroops },
+    { "walk_map", &game_cheats.walkMap }, { "walk_melee", &game_cheats.walkMelee }, { "stop_ageing", &game_cheats.stopAgeing },
+    { "max_honor", &game_cheats.maxHonor }, { "max_troops", &game_cheats.maxTroops }, { "max_land", &game_cheats.maxLand },
+    { "max_swordsmanship", &game_cheats.maxSwordsmanship }, { "max_generalship", &game_cheats.maxGeneralship },
+  };
+  for (const char *p = list; p && *p;)
+  {
+    size_t n = strcspn(p, " ,"), k;
+    for (k = 0; k < sizeof names / sizeof *names; k++)
+    {
+      size_t len = strlen(names[k].name);
+      if (n >= len && !strncmp(p, names[k].name, len) && (n == len || p[len] == '='))
+      {
+        *names[k].on = n > len ? atoi(p + len + 1) : 1;
+        break;
+      }
+    }
+    if (k == sizeof names / sizeof *names) fprintf(stderr, "opensamurai: OPENSAMURAI_CHEATS: no cheat \"%.*s\"\n", (int)n, p);
+    p += n;
+    while (*p == ' ' || *p == ',') p++;
+  }
 }
 
 int main(int argc, char **argv)
@@ -866,6 +941,8 @@ int main(int argc, char **argv)
   scriptShots = getenv("OPENSAMURAI_SHOTS");
   scriptScans = getenv("OPENSAMURAI_SCANS");
   scriptTaps = getenv("OPENSAMURAI_TAPS");
+  scriptPeek = getenv("OPENSAMURAI_PEEK");
+  script_cheats(getenv("OPENSAMURAI_CHEATS"));
   scriptPictures = getenv("OPENSAMURAI_PICTURES");
   if (getenv("OPENSAMURAI_FRAMES")) lastFrame = atol(getenv("OPENSAMURAI_FRAMES"));
   fast = getenv("OPENSAMURAI_FAST") != NULL;
@@ -944,8 +1021,9 @@ int main(int argc, char **argv)
   renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (!renderer) renderer = SDL_CreateRenderer(window, -1, 0);
   setup_video();
-  overlay_menu_host menuHost = { &S, window, renderer, menu_apply, pad_held, "" };
+  overlay_menu_host menuHost = { &S, window, renderer, menu_apply, pad_held, "", &menuCheats };
   snprintf(menuHost.cfg_path, sizeof menuHost.cfg_path, "%s", cfgPath);
+  cheats_to_menu();
   overlay_menu_init(&menuHost);
   int code = game_run(&host);
   overlay_menu_close();

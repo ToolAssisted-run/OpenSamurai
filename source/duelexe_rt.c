@@ -13,11 +13,19 @@
 #include "duelexe_rt.h"
 #include "lzw.h"
 
+// (the run-time's own functions are traced but never skipped: some return a value)
+#undef FN
+#define FN(addr) \
+  do { \
+    if (duel_trace) duel_trace(addr); \
+  } while (0)
+
 #define DUEL_CS 0x27CC
 #define DUEL_PSP 0x27BC
 
 static const DuelHost *host;
 void (*duel_trace)(uint32_t addr);
+int (*duel_cheat)(uint32_t addr);
 static jmp_buf exitJump;
 static bool exitArmed;
 

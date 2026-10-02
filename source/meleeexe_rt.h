@@ -8,6 +8,7 @@
 #define FN(addr) \
   do { \
     if (meleeexe_trace) meleeexe_trace(addr); \
+    if (meleeexe_cheat) meleeexe_cheat(addr); \
   } while (0)
 
 void ml_driver(int slot);

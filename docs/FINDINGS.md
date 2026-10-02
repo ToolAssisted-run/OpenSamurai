@@ -718,6 +718,51 @@ recalibrates the joystick (1CEC:1938, only with shared+34 = 1); READ.ME says it 
 game cannot reach the uncalibrated strategic-map hang of 5.12: the setup calibrates whenever it enables the
 joystick.
 
+### 5.15 Cheats (source/cheats.c) and two frontend fixes found with them
+
+The in-game menu's cheats act on the original programs at the places the rules above name, through the recompiled
+functions' entries (each program's FN hook, before the first instruction, SS:SP at the return address) or RP's frames.
+Off, each changes nothing: with every cheat off the frontend shows the same frames as before them, and the oracle
+comparisons give the same results. None touches the copy protection or its consequences (shared+2E, RP's DS:812E and
+DS:7F34).
+
+- Invulnerable (melee): MELEE's own debug switch DS:3567 (5.14), set at the entry of the wound 1000:A7CC, which skips
+  the player's wound increment; the stagger (state 0x2C) remains.
+- Invulnerable (duel): the wound 1000:1624(fighter) skipped for the player (fighter 0): no wound, no knock-back, no
+  fall. DUEL's FN hook may skip a function (its functions are void; the hook pops the near return address).
+- Invulnerable troops / troops never rout (battle): at the damage pass 1000:0A1C(unit) a player unit's gathered
+  damage (+2A) is zeroed; at the rout check 1000:2424(unit) a player unit's step morale (+30) below 0 is lifted to 0
+  (a unit already routed, state 11, is left alone: the check would rally it). R's retreat sets state 11 and morale 0
+  directly, so it still works. A unit that loses a figure and cannot fit its smaller block is removed by the damage
+  routine itself (1000:0A1C's try_turn): a loss, not a rout.
+- Faster troops (battle): every unit moves through 1000:2802(unit) (turn by at most the turn rate +22, march by the
+  speed +20, or the formation route's pace DS:26D8 for state 4); for the player's units the speed (once a step: the
+  drawing pass 1000:49C8 recomputes it), the turn rate (from the type's DS:1504 + 12 × type) and the route's pace are
+  multiplied at the entry, the route's pace put back for the enemy's.
+- Faster walk (map): the walking loop 2706:0000 waits for DS:3038 > 2 (three frames) before each step; k − 1 of every
+  k steps go without the wait (the loop is known by its caller's return address, 3DE7:0214, at BP + 2).
+- Faster walk (melee): the player's sub-step 1000:876E(0) takes 2 or 4 pixels instead of DS:3564 (dividing what is
+  left of the tile's four), the move timer DS:0058 shortened for the rest of the factor; the others keep DS:3564.
+- Stop ageing: at the entry of the ageing 1568:013E, the tick it is about to add is taken back from the player's age
+  (master block +02) and the family words it will age (the first n of the master block, n = the non-empty words of the
+  working block, as 1568:000A counts them); an age on a whole year is let through one tick first, so that the year's
+  changes (5.14) never come round.
+- Max honor, troops, land, swordsmanship, generalship: held at 128 in both character blocks (master DS:653E, working
+  DS:7CE8, player record +0E..+16) at every RP frame. 128 is every routine's cap: 1568:05BC (troops), 0590 (land),
+  05E8, 0614 clamp to 1..128 at every rank; 1568:0434 clamps honor's base to 1..112 and adds the family's bonuses
+  back (wife 4, heir 8, other children 2 each), so 128 is the most any character can hold.
+
+Two frontend bugs the cheats' tests found:
+
+- The battle never ran in the frontend: BATTLE's INT 8 handler is 1883:015F (its `sti`; the far pointer it installs
+  is at 1883:015B), and game.c counted the battle's frames only while INT 8 pointed at 1883:0160, so the waits never
+  ended after the formation screen (the battle tests answer the frame counter from their captures and did not see
+  it).
+- RP's keyboard joystick on the travel and strategic maps (168c:0D36 / 0D8E: its bytes DS:339A-33A3 cleared,
+  NumLock off, INT 9 saved into the handler's chaining jump at 168c:0EC0 and pointed at 168c:0DA8) was a stub, so
+  game.c's emulation of the handler never ran for RP: a held arrow walked only with the keyboard's repeated keys. The
+  hook is now made; the handler's collapsing of repeated keys in the BIOS buffer is not emulated.
+
 ## 6. Methods
 
 The oracle is the real game in DOSBox-X headless (Chimera's core with the tracer branch, as for SDLPoP2).
@@ -759,6 +804,8 @@ F-keys not at all; decoded with the workspace's work/jrsrkeys.py.
 
 ## 8. Log
 
+- 2026-10-02: cheats (5.15); the battle runs in the frontend (its timer handler is 1883:015F, not 0160); RP's
+  keyboard joystick hook made (the travel map's held keys).
 - 2026-09-28: the rules read out of the verified code for the game guide (5.14): the duel's unsigned skill
   shift, the melee's dead village bonus, the campaign's concession price, the machines' differences.
 

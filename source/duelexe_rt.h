@@ -5,9 +5,11 @@
 #include "dsimage.h"
 #include "duelexe.h"
 
+// (the functions are void, and FN is their first statement: a skipped one returns at once)
 #define FN(addr) \
   do { \
     if (duel_trace) duel_trace(addr); \
+    if (duel_cheat && duel_cheat(addr)) return; \
   } while (0)
 
 void du_driver(int slot);

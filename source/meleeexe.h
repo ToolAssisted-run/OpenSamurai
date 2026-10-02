@@ -38,5 +38,7 @@ void meleeexe_entry(uint16_t psp, uint16_t ss, uint16_t sp);
 void meleeexe_main(const uint16_t regs[9]);
 
 extern void (*meleeexe_trace)(uint32_t addr);
+// the cheats' hook (cheats.c), at the same function entries
+extern void (*meleeexe_cheat)(uint32_t addr);
 
 #endif

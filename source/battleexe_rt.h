@@ -8,6 +8,7 @@
 #define FN(addr) \
   do { \
     if (battle_trace) battle_trace(addr); \
+    if (battle_cheat) battle_cheat(addr); \
   } while (0)
 
 void ba_driver(int slot);

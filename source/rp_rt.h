@@ -9,10 +9,11 @@
 #include "dsimage.h"
 #include "rp.h"
 
-// function entries, for comparing the flow with the original's instruction traces (tests)
+// function entries, for comparing the flow with the original's instruction traces (tests), and the cheats' hook
 #define FN(addr) \
   do { \
     if (rp_trace) rp_trace(addr); \
+    if (rp_cheat) rp_cheat(addr); \
   } while (0)
 
 // the run-time library's functions have the library's names in the translation: here they are rp_ functions
