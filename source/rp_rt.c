@@ -53,6 +53,7 @@ void (*rp_tickHook)(void);
 jmp_buf rp_resume;
 u8 rp_resumeArmed;
 void (*rp_trace)(uint32_t addr);
+void (*rp_cheat)(uint32_t addr);
 
 void rp_attach(uint8_t *ds, uint16_t dsSeg, uint16_t sharedSeg, const RpHost *h)
 {
@@ -452,8 +453,19 @@ void RegisterOverlay(u16 seg)
     *P16(stub + 3) = cs;
   }
 }
-void HookKeyboard(void) {}
-void UnhookKeyboard(void) {}
+// the travel and strategic maps' keyboard joystick (168c:0D36): its bytes cleared (DS:339A-33A3: the axes, the
+// buttons, the key held, the tick of its press, the prefix, the last key, the bytes to skip), NumLock off, INT 9's
+// vector saved in the handler's chaining jump (168c:0EC0) and pointed at the handler, 168c:0DA8 (the host emulates it
+// from the scan codes while INT 9 points at it: game.c's key_byte); 168c:0D8E puts the vector back
+void HookKeyboard(void)
+{
+  *far_ptr(0x40, 0x17) &= 0xDF;
+  for (u16 a = 0x339A; a <= 0x33A3; a++) *P8(a) = 0;
+  memcpy(far_ptr(0x2E58, 0x0EC0), far_ptr(0, 0x24), 4);
+  *(u16a *)far_ptr(0, 0x24) = 0x0DA8;
+  *(u16a *)far_ptr(0, 0x26) = 0x2E58;
+}
+void UnhookKeyboard(void) { memcpy(far_ptr(0, 0x24), far_ptr(0x2E58, 0x0EC0), 4); }
 
 // ---------------------------------------------------------------- the drivers
 
