@@ -31,6 +31,9 @@ typedef struct
   void *ctx;
   bool restart;  // the host restarts RP after a sub-game (see subgame); else RP resumes at once (the tests)
   bool writeFiles;  // the saved games (TALLTALE.DAT) are written to gameDir (else the writes succeed without a file)
+  // delay(n) (29F7:0048: it spins until the timer's frame count DS:3038 has gone n further): the host lets the n
+  // frames pass (NULL: the counts are advanced at once, without the time; the tests)
+  void (*delay)(void *ctx, int frames);
 } RpHost;
 
 // Use this data segment image (RP_DS_SIZE bytes) and host for the calls below; dsSeg and sharedSeg are the

@@ -116,6 +116,11 @@ u8 rp_frame_poll(void)
 
 void rp_delay_frames(int n)
 {
+  if (host && host->delay)
+  {
+    host->delay(host->ctx, n);
+    return;
+  }
   *P8(0x3038) = (u8)(*P8(0x3038) + n);
   *P8(0x303a) = (u8)(*P8(0x303a) + n);
 }

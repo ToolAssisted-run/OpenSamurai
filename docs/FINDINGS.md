@@ -795,6 +795,31 @@ Two frontend bugs the cheats' tests found:
   game.c's emulation of the handler never ran for RP: a held arrow walked only with the keyboard's repeated keys. The
   hook is now made; the handler's collapsing of repeated keys in the BIOS buffer is not emulated.
 
+### 5.16 The review of the code written anew (2026-10-02)
+
+What OpenSamurai writes itself rather than translates (the launcher in game.c, the runtimes, the hardware models),
+checked against the originals:
+
+- The oracle captures: every one passes (756 jobs). The 25 that failed were captures that cannot replay, now in the
+  workspace's oracle/obsolete: w_R0-R3 (the first format), seven of batch S (their inputs probed at the stubs, which
+  race the keyboard interrupt; the same sessions are batch U), w_U14 (no sub-game results; w_V14 is the same session
+  with them); w_ST0 was an IBM speaker capture filed as Tandy's (w_SI0, 0 differences).
+- The launcher against OLD.COM (§2): the same exit codes and chaining (the MELEE -> DUEL test was inverted, fixed);
+  the one difference is START's exit 99 (a file error), after which OLD.COM still runs RP and OpenSamurai stops.
+  The setup's effects: at START's main, its data segment and the whole shared block are what the original's are
+  (gametest, w_T1 and w_T5: 0 bytes differ).
+- The retrace (port 3DA, toggling at each read, a frame at each retrace's start: one frame per wait): START, DUEL,
+  BATTLE and MELEE measure the frame with it at their start (the library's timer set-up, covered by the captures);
+  BATTLE's 1000:4F7C waits n retraces; MGRAPHIC and EGRAPHIC wait one before the screen and palette writes. Two count
+  instead: the dissolve's calibration (5.7c, fixed) and EGRAPHIC's shake step (11EB: a write only when the retrace is
+  on), which no program calls.
+- RP's delay(n) (29F7:0048: it spins until the timer's frame count DS:3038 is n further) was a C stand-in that
+  advanced the counts at once: every pause was instant. It now lets the frames go by (RpHost.delay; the tests keep
+  the stand-in, the timer bytes being theirs to replay): 100 frames on Alt-V's and Alt-Z's notices (1CEC:1A1A,
+  18B4), 120 after a save or a restore (2817:0004) and in the Shogun's ending (2567:0000), 10 before a full-screen
+  picture's dissolve (1EAA:0B66), 30 in Alt-J's calibration, 3 after a joystick button's release (1000:05CA), and
+  the menu cursor's slide between rows, a frame a step (1CEC:0846).
+
 ## 6. Methods
 
 The oracle is the real game in DOSBox-X headless (Chimera's core with the tracer branch, as for SDLPoP2).

@@ -811,6 +811,16 @@ static const ProgTimer rpTimer = { RP_DS, 0x3040, 0x303C, true, rp_hooked, rp_ti
 
 static uint16_t rp_bios_ticks(void *ctx) { return bios_ticks(ctx); }
 
+// delay(n) (29F7:0048): the frames go by until the timer handler's count DS:3038 is n further, as the original spins
+// on it (the pauses after Alt-V, Alt-Z, a save or a restore, in the ending, before a full-screen picture's dissolve,
+// and the menu cursor's slide between rows)
+static void rp_delay(void *ctx, int n)
+{
+  (void)ctx;
+  uint8_t end = (uint8_t)(*far_ptr(RP_DS, 0x3038) + n);
+  while (*far_ptr(RP_DS, 0x3038) != end && rp_hooked()) frame();
+}
+
 static void rp_subgame(void *ctx, int code);
 
 // RP loaded and started from main (its start-up's effects in C); main does not return (exit longjmps to rpExit)
@@ -840,7 +850,7 @@ static void rp_start(void)
   w16(RP_DS, 0x9754, 0x00B2), w16(RP_DS, 0x9756, 0x37FA);
   w16(RP_DS, 0x9758, 0), w16(RP_DS, 0x975A, 0), w16(RP_DS, 0x975C, 0);
   static const uint16_t regs[9] = { 0x9754, 0, 0x396A, 0x396A, GAME_ENV_SEG, 0x80D3, 0xFFFF, 0x7FE5, 0x80D3 };
-  static RpHost rh = { rp_time_, rp_key_waiting, rp_read_key, rp_frame_poll, NULL, rp_bios_ticks, rp_exit_, rp_subgame, NULL, NULL, true, true };
+  static RpHost rh = { rp_time_, rp_key_waiting, rp_read_key, rp_frame_poll, NULL, rp_bios_ticks, rp_exit_, rp_subgame, NULL, NULL, true, true, rp_delay };
   rh.gameDir = host->gameDir;
   g_dsSeg = 0;
   rp_attach(far_ptr(RP_DS, 0), RP_DS, GAME_SHARED_SEG, &rh);
