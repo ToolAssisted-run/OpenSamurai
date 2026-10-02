@@ -49,7 +49,7 @@ if mt32emuDependency.found()
 endif
 if sdl2Dependency.found()
   executable('opensamurai',
-    'main.c',
+    'main.c', 'overlay_menu.c', 'settings.c', 'text.c',
     c_args : frontendArgs,
     dependencies : [ opensamuraiDependency, sdl2Dependency, mt32emuDependency ],
     link_language : frontendLinkLanguage,

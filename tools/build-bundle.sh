@@ -1,8 +1,8 @@
 #!/bin/bash
 # build-bundle.sh --platform linux|windows --out DIR: build OpenSamurai for the platform and put what a user downloads
-# in DIR, flat (the files unpack straight into the game's folder): the executable, a roms folder for the player's
-# MT-32 ROMs (they are Roland's: the player provides them), README.md, LICENSE, the licenses of what is built in,
-# and BUILD.txt (the commit and the toolchain it was built with). CI and the releases use it (.github/workflows);
+# in DIR, flat (the files unpack straight into the game's folder): the executable, OpenSamurai.ini (the settings, every
+# option documented), a roms folder for the player's MT-32 ROMs (they are Roland's: the player provides them),
+# README.md, LICENSE, the licenses of what is built in, and BUILD.txt (the commit and the toolchain it was built with). CI and the releases use it (.github/workflows);
 # it needs meson, ninja, cmake and a C++ compiler (for Munt) and, for Windows, mingw-w64.
 #   linux:   SDL2 built in from the WrapDB wrap (--force-fallback-for=sdl2), Munt and the C++ runtime linked in
 #            statically: the executable needs only the C library
@@ -59,10 +59,11 @@ cp "$sdlLicense" "$out/licenses/SDL2-LICENSE.txt"
 if [ "$platform" = windows ]; then
 	x86_64-w64-mingw32-strip "$out/opensamurai.exe"
 	cp LICENSE "$out/LICENSE.txt"
+	sed 's/$/\r/' OpenSamurai.ini > "$out/OpenSamurai.ini"
 	sed 's/$/\r/' tools/roms-README.txt > "$out/roms/README.txt"
 else
 	strip "$out/opensamurai"
-	cp LICENSE "$out/"
+	cp LICENSE OpenSamurai.ini "$out/"
 	cp tools/roms-README.txt "$out/roms/README.txt"
 fi
 {

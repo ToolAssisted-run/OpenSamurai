@@ -30,3 +30,13 @@ gameDir = get_option('gameDir')
 if gameDir != ''
   test('cattest', testExecutables['cattest'], args : [ gameDir ], suite : 'core')
 endif
+
+# The frontend's in-game menu and its settings (frontend/overlay_menu.c, settings.c), headless: no game files needed
+if sdl2Dependency.found()
+  menutest = executable('menutest',
+    'menutest.c', files('../frontend/overlay_menu.c', '../frontend/settings.c', '../frontend/text.c'),
+    c_args : commonCompileArgs,
+    dependencies : [ sdl2Dependency ],
+  )
+  test('menutest', menutest, args : [ meson.current_build_dir() ], suite : 'frontend')
+endif

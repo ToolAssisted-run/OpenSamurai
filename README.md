@@ -23,6 +23,8 @@ The development build is rebuilt after every change. If you want a build that ne
 
 The game asks the original's crest question at the start, so keep the manual at hand. Saved games (Alt+S at the Home Option scroll) go to the game's folder, as in the original. The keys are listed below.
 
+F4 opens OpenSamurai's in-game menu, where you can change the settings and find the game's commands. The game waits while the menu is open.
+
 Found a bug or a glitch, or have an idea? Everything is welcome on the [issues page](https://github.com/ToolAssisted-run/OpenSamurai/issues).
 
 ## Screenshots
@@ -40,6 +42,15 @@ Found a bug or a glitch, or have an idea? Everything is welcome on the [issues p
 </p>
 
 ## Keys
+
+### OpenSamurai's keys
+
+| | |
+|---|---|
+| F4, or a click of the left mouse button | the in-game menu: settings, the game's commands, quit (the game waits while it is open) |
+| Alt+Enter | fullscreen on or off |
+
+In the menu, the arrows move, Enter chooses, and Esc or the right mouse button goes back. F4 closes it.
 
 ### The original game's keys
 
@@ -88,13 +99,15 @@ Found a bug or a glitch, or have an idea? Everything is welcome on the [issues p
 
 A joystick or game controller that is plugged in is the game's joystick. OpenSamurai does the setup's calibration for you, and Alt+J calibrates it again. `/NJ` leaves it out.
 
+A game controller's Start or Back button opens the in-game menu. In the menu, the D-pad or the left stick moves, A chooses, and B goes back.
+
 ## Command line
 
 You can also start OpenSamurai from a terminal:
 
     opensamurai [GAME FOLDER] [/NT] [/NJ] [/AA | /AR | /AI | /AT | /AN]
 
-All options are optional, and are the original setup's:
+All options are optional, and are the original setup's. For that run, they win over the settings (see [Settings](#settings)):
 
 | Option | Default | What it does |
 |---|---|---|
@@ -113,7 +126,9 @@ If something is wrong, for example a missing game file, OpenSamurai says what an
 
 ## Settings
 
-OpenSamurai needs no settings file: the options above are the original setup's, and the game keeps its own (Alt+V, Alt+Z).
+OpenSamurai's settings are in `OpenSamurai.ini`, which comes with OpenSamurai and explains every option: the window (fullscreen, its size, the 4:3 aspect ratio, integer scaling, the scaling method), the sound card, the volume, the joystick, skipping the title, and the random seed. OpenSamurai looks for it in the current folder, then next to the program, then in the game's folder. Without it, OpenSamurai uses the defaults. The game keeps its own settings too (Alt+V, Alt+Z).
+
+The in-game menu (F4) changes the same settings. It saves them in `OpenSamurai.cfg`, next to `OpenSamurai.ini` (in the game's folder if there is no `OpenSamurai.ini`). `OpenSamurai.cfg` is read after `OpenSamurai.ini`, unless `OpenSamurai.ini` was edited since. Delete `OpenSamurai.cfg` to go back to the settings in `OpenSamurai.ini`. The window and the volume change at once. The sound card, the joystick, the title and the random seed are chosen when the game starts, so they change at the next start.
 
 The Roland MT-32 needs its two ROMs, a control ROM and a PCM ROM. They are Roland's and not included, so you provide your own. Put the two files (any names: they are recognized by their contents) in one of these folders, looked at in this order:
 
@@ -126,7 +141,7 @@ An original MT-32's ROMs (versions 1.04 to 1.07) are the sound the game was made
 
 `OPENSAMURAI_WAV=file.wav` records the sound, and `OPENSAMURAI_MIDI=file.mid` the MT-32's music.
 
-Every random number in a game comes from one seed, taken from the clock when OpenSamurai starts and shown in the terminal. `OPENSAMURAI_SEED=N` sets it, and the same seed draws the same random numbers.
+Every random number in a game comes from one seed, taken from the clock when OpenSamurai starts and shown in the terminal. `random_seed` in `OpenSamurai.ini` or `OPENSAMURAI_SEED=N` sets it, and the same seed draws the same random numbers.
 
 With the IBM PC speaker the title runs slower, as it does in the original.
 
@@ -159,7 +174,7 @@ The tests that play the game need the game's files, which are not in this reposi
 ### Where things are
 
 - `source/`: the game. Each original program is rebuilt whole (`start_core.c`, `rp_core.c`, `duelexe_core.c`, `battleexe_core.c`, `meleeexe_core.c`), with the duel, battle and melee simulations in readable C (`duel.c`, `battle.c`, `melee_core.c`), the sound drivers (`isound.c`, `tsound.c`, `asound.c`, `rsound.c`) and models of the chips they drive.
-- `frontend/`: the [SDL2](https://www.libsdl.org) frontend.
+- `frontend/`: the [SDL2](https://www.libsdl.org) frontend, with SDLPoP's in-game menu (`overlay_menu.c`) and the settings (`settings.c`, `OpenSamurai.ini`).
 - `docs/FINDINGS.md`: the reconstruction, program by program, and the game's rules as the code has them.
 - `tools/` and `tests/`: helpers and the test suites.
 
@@ -174,6 +189,7 @@ OpenSamurai does not let you skip the original game's copy protection.
 ## Credits
 
 - [SDLPoP2](https://github.com/ToolAssisted-run/SDLPoP2), the reconstruction OpenSamurai follows.
+- [SDLPoP](https://github.com/NagyD/SDLPoP), by Dávid Nagy (NagyD) and its contributors (GPL-3.0-or-later): the in-game menu is SDLPoP's (its pause menu is Falcury's), by way of SDLPoP2, with SDLPoP's fonts. The menu's small font is adapted from Yuji Oshimoto's freeware font 04b_03.
 - [Munt](https://github.com/munt/munt), by the Munt team (LGPL-2.1-or-later), emulates the Roland MT-32.
 - [SDL2](https://www.libsdl.org) (zlib license) draws the game and plays its sound.
 - *Sword of the Samurai* (MicroProse, 1989).

@@ -1,5 +1,6 @@
 // opensamurai GAMEDIR [/NT] [/AA|/AI|/AT|/AN]: the game in a window. The screen is the VGA's mode 13h (VRAM at A000, the DAC's
-// palette), 70 frames a second as on the VGA; the keyboard gives the BIOS's keys.
+// palette), 70 frames a second as on the VGA; the keyboard gives the BIOS's keys. OpenSamurai.ini holds the settings;
+// F4 (or the left mouse button, or a controller's Start) opens the in-game menu (overlay_menu.c), which changes them.
 #include <SDL.h>
 #include <ctype.h>
 #include <dirent.h>
@@ -18,16 +19,43 @@
 #include "game.h"
 #include "rp.h"
 #include "start.h"
+#include "overlay_menu.h"
+#include "settings.h"
 
 uint8_t *far_ptr(uint16_t seg, uint16_t off);
 
 static SDL_Window *window;
+static os_settings S;  // OpenSamurai.ini's settings (and the in-game menu's)
 // the joystick: the first one plugged in (/NJ: none), its first two axes (or its hat) and buttons; for scripted runs
-// OPENSAMURAI_JOY="FRAME:X,Y,BUTTONS ..." (from that frame on; X and Y -32768 to 32767, BUTTONS bit 0 and 1)
+// OPENSAMURAI_JOY="FRAME:X,Y,BUTTONS ..." (from that frame on; X and Y -32768 to 32767, BUTTONS bit 0 and 1). A game
+// controller (SDL's: one it knows the layout of) is opened as one, for the in-game menu (Start, the D-pad, A and B):
+// the game reads it as a joystick all the same
 static SDL_Joystick *joy;
+static SDL_GameController *pad;
 static bool useJoystick = true;
+static bool joyHeld;  // (the menu closed with a button held: the game sees none until they are all let go)
 static const char *scriptJoy;
 static long frameCount;
+static void joystick_open(int index)
+{
+  if (SDL_IsGameController(index) && (pad = SDL_GameControllerOpen(index))) joy = SDL_GameControllerGetJoystick(pad);
+  else joy = SDL_JoystickOpen(index);
+}
+static void joystick_close(void)
+{
+  if (pad) SDL_GameControllerClose(pad);
+  else if (joy) SDL_JoystickClose(joy);
+  pad = NULL, joy = NULL;
+}
+static int pad_held(uint32_t *held, int *x, int *y)
+{
+  if (!pad) return 0;
+  for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX && b < 32; b++)
+    if (SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)b)) *held |= 1u << b;
+  *x = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX);
+  *y = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTY);
+  return 1;
+}
 static int joystick(void *ctx, int *x, int *y)
 {
   (void)ctx;
@@ -59,12 +87,21 @@ static int joystick(void *ctx, int *x, int *y)
     if (h & SDL_HAT_UP) *y = -32768;
     if (h & SDL_HAT_DOWN) *y = 32767;
   }
-  return (SDL_JoystickGetButton(joy, 0) ? 1 : 0) | (SDL_JoystickGetButton(joy, 1) ? 2 : 0);
+  int b = (SDL_JoystickGetButton(joy, 0) ? 1 : 0) | (SDL_JoystickGetButton(joy, 1) ? 2 : 0);
+  if (joyHeld && b) return 0;
+  joyHeld = false;
+  return b;
 }
 static SDL_Renderer *renderer;
-static SDL_Texture *texture;
+static SDL_Texture *texture, *texture2x;
 static uint16_t keys[64];
 static int keyHead, keyTail;
+static void key_push(uint16_t k)
+{
+  if ((keyTail + 1) % 64 == keyHead) return;
+  keys[keyTail] = k;
+  keyTail = (keyTail + 1) % 64;
+}
 // for scripted runs: OPENSAMURAI_KEYS="FRAME:KEY ..." (KEY hexadecimal, the BIOS's), OPENSAMURAI_SHOTS="FRAME ..."
 // (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting, the start on
 // 25 October 1989 at noon;
@@ -190,28 +227,81 @@ static uint8_t pc_scan(SDL_Scancode c, bool *extended)
   }
 }
 
+// the keys the game saw pressed: their releases still reach it while the menu shows, and it gets no release of a key it
+// did not see pressed (one held from the menu)
+static bool gameDown[2][128];
+static void game_key_event(uint8_t scan, bool extended, bool pressed)
+{
+  if (!pressed && !gameDown[extended][scan & 0x7F]) return;
+  gameDown[extended][scan & 0x7F] = pressed;
+  game_key(scan, extended, pressed);
+}
+
+// a key typed for the player (a COMMANDS entry of the menu, or a key with Alt that closed it), as the keyboard gives
+// one: the make codes and the BIOS's key now, the break codes three frames later
+static struct
+{
+  long frame;
+  uint8_t scan;
+  bool extended, alt;
+} typed = { -1, 0, false, false };
+static void typed_release(void)
+{
+  if (typed.frame < 0 || frameCount < typed.frame) return;
+  if (typed.scan) game_key_event(typed.scan, typed.extended, false);
+  if (typed.alt) game_key_event(0x38, false, false);
+  typed.frame = -1;
+}
+static void type_key(uint16_t bios, uint8_t scan, bool extended, bool alt)
+{
+  if (typed.frame >= 0) typed.frame = frameCount, typed_release();  // (the one before: released first)
+  if (alt) game_key_event(0x38, false, true);
+  if (scan) game_key_event(scan, extended, true);
+  if (bios) key_push(bios);
+  typed.frame = frameCount + 3, typed.scan = scan, typed.extended = extended, typed.alt = alt;
+}
+
+// Alt+Enter: fullscreen on or off (not the game's)
+static bool fullscreen_key(const SDL_Event *e)
+{
+  if (e->type != SDL_KEYDOWN || !(e->key.keysym.mod & KMOD_ALT) || (e->key.keysym.sym != SDLK_RETURN && e->key.keysym.sym != SDLK_KP_ENTER)) return false;
+  if (!e->key.repeat && window)
+  {
+    bool full = !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP);
+    SDL_SetWindowFullscreen(window, full ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+    SDL_ShowCursor(full ? SDL_DISABLE : SDL_ENABLE);
+  }
+  return true;
+}
+static bool device_event(const SDL_Event *e)
+{
+  if (e->type == SDL_JOYDEVICEADDED && !joy && useJoystick) joystick_open(e->jdevice.which);
+  else if (e->type == SDL_JOYDEVICEREMOVED && joy && e->jdevice.which == SDL_JoystickInstanceID(joy)) joystick_close();
+  else return false;
+  return true;
+}
+
+static void menu_run(void);
 static void pump(void)
 {
   SDL_Event ev;
   while (SDL_PollEvent(&ev))
   {
     if (ev.type == SDL_QUIT) exit(0);
-    if (ev.type == SDL_JOYDEVICEADDED && !joy && useJoystick) joy = SDL_JoystickOpen(ev.jdevice.which);
-    if (ev.type == SDL_JOYDEVICEREMOVED && joy && ev.jdevice.which == SDL_JoystickInstanceID(joy)) SDL_JoystickClose(joy), joy = NULL;
+    if (device_event(&ev) || fullscreen_key(&ev)) continue;
+    int menu = overlay_menu_open_event(&ev);
+    if (menu == 1) menu_run();
+    if (menu) continue;
     if ((ev.type == SDL_KEYDOWN && !ev.key.repeat) || ev.type == SDL_KEYUP)
     {
       bool ext;
       uint8_t sc = pc_scan(ev.key.keysym.scancode, &ext);
-      if (sc) game_key(sc, ext, ev.type == SDL_KEYDOWN);
+      if (sc) game_key_event(sc, ext, ev.type == SDL_KEYDOWN);
     }
     if (ev.type == SDL_KEYDOWN)
     {
       uint16_t k = bios_key(&ev.key.keysym);
-      if (k && (keyTail + 1) % 64 != keyHead)
-      {
-        keys[keyTail] = k;
-        keyTail = (keyTail + 1) % 64;
-      }
+      if (k) key_push(k);
     }
   }
 }
@@ -251,16 +341,108 @@ static bool listed(const char *list, long n, unsigned *value)
   return false;
 }
 
+// for scripted runs of the in-game menu: OPENSAMURAI_TAPS="PICTURE:KEY ..." (KEY an SDL key name: F4, Down, Return,
+// Escape, ...; alt+KEY with Alt) taps the key as that picture is shown; OPENSAMURAI_PICTURES="PICTURE ..." writes it to
+// pic-PICTURE.ppm, the menu included. The pictures are the game's frames and the menu's alike, counted from 1 (until
+// the menu first opens, a picture's number is its frame's)
+static const char *scriptTaps, *scriptPictures;
+static long pictureCount;
+static void taps(long n)
+{
+  for (const char *p = scriptTaps; p && *p;)
+  {
+    char *q, name[64];
+    long f = strtol(p, &q, 10);
+    if (q == p || *q != ':') break;
+    size_t len = strcspn(q + 1, " ");
+    snprintf(name, sizeof name, "%.*s", (int)len, q + 1);
+    p = q + 1 + len;
+    while (*p == ' ') p++;
+    if (f != n) continue;
+    bool alt = !strncasecmp(name, "alt+", 4);
+    SDL_Event e = { 0 };
+    e.key.keysym.scancode = SDL_GetScancodeFromName(name + (alt ? 4 : 0));
+    e.key.keysym.sym = SDL_GetKeyFromScancode(e.key.keysym.scancode);
+    e.key.keysym.mod = alt ? KMOD_LALT : 0;
+    e.type = SDL_KEYDOWN, e.key.state = SDL_PRESSED;
+    SDL_PushEvent(&e);
+    e.type = SDL_KEYUP, e.key.state = SDL_RELEASED;
+    SDL_PushEvent(&e);
+  }
+}
+
+// the picture: VRAM through the DAC, with the in-game menu over it when it shows
+static void draw_screen(void)
+{
+  static uint32_t argb[64000];
+  static uint8_t planar[64000];
+  const uint8_t *vram = far_ptr(0xA000, 0);
+  if (vga.planar)  // the EGA's planar mode (the melee): the planes through the attribute controller
+  {
+    vga_render(planar, asm_dac);
+    vram = planar;
+  }
+  for (int k = 0; k < 64000; k++)
+  {
+    const uint8_t *c = asm_dac[vram[k]];
+    argb[k] = 0xFF000000u | (uint32_t)((c[0] << 2 | c[0] >> 4) << 16 | (c[1] << 2 | c[1] >> 4) << 8 | (c[2] << 2 | c[2] >> 4));
+  }
+  overlay_menu_compose(argb);
+  pictureCount++;
+  if (listed(scriptPictures, pictureCount, NULL))
+  {
+    char name[64];
+    snprintf(name, sizeof name, "pic-%ld.ppm", pictureCount);
+    FILE *f = fopen(name, "wb");
+    if (f)
+    {
+      fprintf(f, "P6 320 200 255\n");
+      for (int k = 0; k < 64000; k++) fputc((int)(argb[k] >> 16 & 0xFF), f), fputc((int)(argb[k] >> 8 & 0xFF), f), fputc((int)(argb[k] & 0xFF), f);
+      fclose(f);
+    }
+  }
+  taps(pictureCount);
+  SDL_UpdateTexture(texture, NULL, argb, 320 * 4);
+  SDL_RenderClear(renderer);
+  if (texture2x)  // fuzzy: nearest-neighbour to twice the size, then smooth to the window
+  {
+    SDL_SetRenderTarget(renderer, texture2x);
+    SDL_RenderCopy(renderer, texture, NULL, NULL);
+    SDL_SetRenderTarget(renderer, NULL);
+    SDL_RenderCopy(renderer, texture2x, NULL, NULL);
+  }
+  else SDL_RenderCopy(renderer, texture, NULL, NULL);
+  SDL_RenderPresent(renderer);
+}
+
+// the logical size (4:3 or square pixels), integer scaling and the scaling method's textures (at the start, and when
+// the menu changes them)
+static void setup_video(void)
+{
+  SDL_RenderSetLogicalSize(renderer, 320, S.use_correct_aspect_ratio ? 240 : 200);  // (the VGA's 320x200 on a 4:3 screen)
+#if SDL_VERSION_ATLEAST(2, 0, 5)
+  SDL_RenderSetIntegerScale(renderer, S.use_integer_scaling ? SDL_TRUE : SDL_FALSE);
+#endif
+  if (texture) SDL_DestroyTexture(texture);
+  if (texture2x) SDL_DestroyTexture(texture2x);
+  texture = texture2x = NULL;
+  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, S.scaling_type == SCALING_BLURRY ? "linear" : "nearest");
+  texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 200);
+  if (S.scaling_type == SCALING_FUZZY)
+  {
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+    texture2x = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, 640, 400);
+    if (!texture2x) fprintf(stderr, "opensamurai: no render target (%s): sharp scaling\n", SDL_GetError());
+  }
+}
+
 static void present(void *ctx)
 {
   (void)ctx;
   frameCount++;
+  typed_release();
   unsigned k;
-  if (listed(scriptKeys, frameCount, &k) && (keyTail + 1) % 64 != keyHead)
-  {
-    keys[keyTail] = (uint16_t)k;
-    keyTail = (keyTail + 1) % 64;
-  }
+  if (listed(scriptKeys, frameCount, &k)) key_push((uint16_t)k);
   scans(frameCount);
   if (listed(scriptShots, frameCount, NULL))
   {
@@ -282,33 +464,18 @@ static void present(void *ctx)
     }
   }
   if (lastFrame >= 0 && frameCount >= lastFrame) exit(0);
-  uint32_t *px;
-  int pitch;
-  if (!SDL_LockTexture(texture, NULL, (void **)&px, &pitch))
-  {
-    static uint8_t planar[64000];
-    const uint8_t *vram = far_ptr(0xA000, 0);
-    if (vga.planar)  // the EGA's planar mode (the melee): the planes through the attribute controller
-    {
-      vga_render(planar, asm_dac);
-      vram = planar;
-    }
-    for (int y = 0; y < 200; y++)
-      for (int x = 0; x < 320; x++)
-      {
-        const uint8_t *c = asm_dac[vram[y * 320 + x]];
-        px[y * (pitch / 4) + x] = 0xFF000000u | (uint32_t)((c[0] << 2 | c[0] >> 4) << 16 | (c[1] << 2 | c[1] >> 4) << 8 | (c[2] << 2 | c[2] >> 4));
-      }
-    SDL_UnlockTexture(texture);
-  }
-  SDL_RenderClear(renderer);
-  SDL_RenderCopy(renderer, texture, NULL, NULL);
-  SDL_RenderPresent(renderer);
+  draw_screen();
   pump();
 }
 
-// the clock: real time, or (fast) a virtual one that runs a little at each look and jumps at the waits
-static uint64_t virtualNow;
+// the clock: real time (without the time the in-game menu showed), or (fast) a virtual one that runs a little at each
+// look and jumps at the waits
+static uint64_t virtualNow, menuTime;
+static uint64_t real_us(void)
+{
+  uint64_t c = SDL_GetPerformanceCounter(), f = SDL_GetPerformanceFrequency();
+  return c / f * 1000000 + c % f * 1000000 / f;  // (c * 1000000 would overflow after hours of a nanosecond counter)
+}
 // the virtual clock (OPENSAMURAI_FAST): 20 us a look, the melee's tick reads what they cost on the original machine
 // (GameHost.meleeTickRead: the speed test's loop 10 us, a pass of its main loop 690 us: with the pass's other looks,
 // about 21 passes a tick, as in the oracle)
@@ -327,7 +494,7 @@ static uint64_t now_us(void *ctx)
     lookCost = 20;
     return virtualNow;
   }
-  return SDL_GetPerformanceCounter() * 1000000 / SDL_GetPerformanceFrequency();
+  return real_us() - menuTime;
 }
 
 static void sleep_until(void *ctx, uint64_t t)
@@ -434,13 +601,14 @@ static bool mt32_try(const char *dir)
   return false;
 }
 
-// where the ROMs are looked for: OPENSAMURAI_MT32ROMS, the user's data folder's roms (SDL's: on Linux
-// ~/.local/share/OpenSamurai/roms), the roms folder next to the program, the game's folder
+// where the ROMs are looked for: OPENSAMURAI_MT32ROMS, OpenSamurai.ini's mt32_roms, the user's data folder's roms (SDL's:
+// on Linux ~/.local/share/OpenSamurai/roms), the roms folder next to the program, the game's folder
 static bool mt32_open(const char *gameDir)
 {
-  char dirs[4][1024];
+  char dirs[5][1024];
   int n = 0;
   if (getenv("OPENSAMURAI_MT32ROMS")) snprintf(dirs[n++], sizeof dirs[0], "%s", getenv("OPENSAMURAI_MT32ROMS"));
+  if (S.mt32_roms[0]) snprintf(dirs[n++], sizeof dirs[0], "%s", S.mt32_roms);
   char *pref = SDL_GetPrefPath("", "OpenSamurai");
   if (pref) snprintf(dirs[n++], sizeof dirs[0], "%sroms", pref), SDL_free(pref);
   char *base = SDL_GetBasePath();
@@ -474,7 +642,12 @@ static void audio(void *ctx, const int16_t *samples, int n)
   }
 #endif
   if (wav) fwrite(st, 4, (size_t)n, wav), wavFrames += (uint32_t)n;
-  if (audioDevice && SDL_GetQueuedAudioSize(audioDevice) < 44100 / 4 * 4) SDL_QueueAudio(audioDevice, st, (Uint32)n * 4);
+  if (audioDevice && SDL_GetQueuedAudioSize(audioDevice) < 44100 / 4 * 4)
+  {
+    if (S.volume < 15)  // (the settings' volume: the device's, not the WAV file's)
+      for (int k = 0; k < 2 * n; k++) st[k] = (int16_t)(st[k] * S.volume / 15);
+    SDL_QueueAudio(audioDevice, st, (Uint32)n * 4);
+  }
 }
 
 // the MT-32's MIDI (/AR): to OPENSAMURAI_MIDI, a standard MIDI file (one track; a tick a sample: 22050 a quarter
@@ -570,6 +743,90 @@ static void notify_player(const char *msg)
 #endif
 }
 
+// the in-game menu (overlay_menu.c), opened by pump(): it runs here, 70 frames a second, until it closes; the game waits
+// meanwhile, inside its call of the frontend, its clock stopped (menuTime), its sound paused
+static void menu_run(void)
+{
+  overlay_menu_open();
+  uint64_t start = real_us(), next = start;
+  if (audioDevice) SDL_PauseAudioDevice(audioDevice, 1);
+  while (overlay_menu_is_open())
+  {
+    SDL_Event ev;
+    while (SDL_PollEvent(&ev))
+    {
+      if (ev.type == SDL_QUIT) overlay_menu_close(), exit(0);
+      if (device_event(&ev) || fullscreen_key(&ev)) continue;
+      if (ev.type == SDL_KEYUP)  // (a key the game saw pressed is released to it)
+      {
+        bool ext;
+        uint8_t sc = pc_scan(ev.key.keysym.scancode, &ext);
+        if (sc) game_key_event(sc, ext, false);
+      }
+      overlay_menu_event(&ev);
+    }
+    int action = overlay_menu_frame();
+    if (action == OVERLAY_MENU_QUIT) exit(0);
+    if (action == OVERLAY_MENU_KEY)  // a key with Alt or Ctrl: the game's
+    {
+      SDL_Keysym k = { 0 };
+      overlay_menu_key(&k.scancode, &k.mod);
+      k.sym = SDL_GetKeyFromScancode(k.scancode);
+      bool ext;
+      uint8_t sc = pc_scan(k.scancode, &ext);
+      type_key(bios_key(&k), sc, ext, (k.mod & KMOD_ALT) != 0);
+    }
+    if (action == OVERLAY_MENU_COMMAND)  // F1-F3, or Alt and a letter
+    {
+      uint16_t key = (uint16_t)overlay_menu_command_key();
+      uint8_t sc = (uint8_t)(key >> 8);
+      type_key(key, sc, false, !(sc >= 0x3B && sc <= 0x44));
+    }
+    draw_screen();
+    next += 1000000 / 70;
+    uint64_t now = real_us();
+    if (next > now + 1000) SDL_Delay((uint32_t)((next - now) / 1000));
+    else if (now > next + 100000) next = now;
+  }
+  if (audioDevice) SDL_PauseAudioDevice(audioDevice, 0);
+  menuTime += real_us() - start;
+  joyHeld = true;
+}
+
+// how the menu's settings take effect (overlay_menu_host.apply); the volume is read as the sound goes out
+static void menu_apply(int what)
+{
+  if (what & OVERLAY_MENU_APPLY_FULLSCREEN) SDL_SetWindowFullscreen(window, S.start_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+  if (what & OVERLAY_MENU_APPLY_VIDEO) setup_video();
+}
+
+// OpenSamurai.ini: the first of the current folder's, the one next to the program and the game folder's; the menu's
+// OpenSamurai.cfg next to it, or in the game's folder without one. 1: read
+static void warn_ini(const char *m) { fprintf(stderr, "opensamurai: %s\n", m); }
+static int settings_files(const char *gameDir, char *ini, size_t iniSize, char *cfg, size_t cfgSize)
+{
+  char cands[3][1100];
+  int n = 0;
+  snprintf(cands[n++], sizeof cands[0], "OpenSamurai.ini");
+  char *base = SDL_GetBasePath();
+  if (base) snprintf(cands[n++], sizeof cands[0], "%sOpenSamurai.ini", base), SDL_free(base);
+  snprintf(cands[n++], sizeof cands[0], "%s/OpenSamurai.ini", gameDir);
+  ini[0] = 0;
+  for (int k = 0; k < n && !ini[0]; k++)
+  {
+    FILE *f = fopen(cands[k], "rb");
+    size_t len = strlen(cands[k]);
+    if (f) fclose(f);
+    if (f && len < iniSize) memcpy(ini, cands[k], len + 1);
+  }
+  const char *slash = strrchr(ini, '/'), *bslash = strrchr(ini, '\\');
+  if (bslash && (!slash || bslash > slash)) slash = bslash;
+  if (!ini[0]) snprintf(cfg, cfgSize, "%s/OpenSamurai.cfg", gameDir);
+  else if (!slash) snprintf(cfg, cfgSize, "OpenSamurai.cfg");
+  else snprintf(cfg, cfgSize, "%.*sOpenSamurai.cfg", (int)(slash - ini + 1), ini);
+  return ini[0] && settings_load(&S, ini, warn_ini);
+}
+
 int main(int argc, char **argv)
 {
   // the game's folder: the first argument; without one (started with a double-click), the program's folder or the
@@ -608,23 +865,37 @@ int main(int argc, char **argv)
   scriptKeys = getenv("OPENSAMURAI_KEYS");
   scriptShots = getenv("OPENSAMURAI_SHOTS");
   scriptScans = getenv("OPENSAMURAI_SCANS");
+  scriptTaps = getenv("OPENSAMURAI_TAPS");
+  scriptPictures = getenv("OPENSAMURAI_PICTURES");
   if (getenv("OPENSAMURAI_FRAMES")) lastFrame = atol(getenv("OPENSAMURAI_FRAMES"));
   fast = getenv("OPENSAMURAI_FAST") != NULL;
   time_t t = time(NULL);
   struct tm *tm = localtime(&t);
   static struct tm fixed = { .tm_year = 89, .tm_mon = 9, .tm_mday = 25, .tm_hour = 12 };
   if (getenv("OPENSAMURAI_FAST")) tm = &fixed;  // (a scripted run starts on the same day: it goes the same way)
+  // the settings (OpenSamurai.ini, then the menu's OpenSamurai.cfg unless the ini is newer); a scripted run
+  // (OPENSAMURAI_FAST) reads neither: it goes the same way whatever the player's settings
+  settings_defaults(&S);
+  char iniPath[1100] = "", cfgPath[1100] = "";
+  if (!fast)
+  {
+    if (settings_files(argv[1], iniPath, sizeof iniPath, cfgPath, sizeof cfgPath)) fprintf(stderr, "opensamurai: settings from %s\n", iniPath);
+    if (overlay_menu_load_cfg(&S, cfgPath, iniPath, warn_ini)) fprintf(stderr, "opensamurai: the in-game menu's settings from %s\n", cfgPath);
+  }
   GameHost host = { present, now_us, sleep_until, key_waiting, read_key,
                     { tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, 0 },
-                    argv[1], false, NULL, 'A', audio, midi, joystick, 0 };
+                    argv[1], S.skip_title, NULL, settings_sound_letters[S.sound], audio, midi, joystick, 0 };
+  useJoystick = S.enable_joystick;
   // the game's one source of randomness (GameHost.seed): the system's clock, read once, here; OPENSAMURAI_SEED=N
-  // gives it (the same N draws the same random numbers); a scripted run (OPENSAMURAI_FAST) has 0
+  // gives it (the same N draws the same random numbers), else the settings' random_seed; a scripted run
+  // (OPENSAMURAI_FAST) has 0
   if (fast) host.meleeTickRead = melee_tick_read;
   if (getenv("OPENSAMURAI_SEED")) host.seed = strtoull(getenv("OPENSAMURAI_SEED"), NULL, 0);
-  else if (!fast) host.seed = (uint64_t)t;
+  else if (!fast) host.seed = S.random_seed_clock ? (uint64_t)t : S.random_seed;
   fprintf(stderr, "opensamurai: random seed %llu (OPENSAMURAI_SEED=%llu repeats it)\n", (unsigned long long)host.seed, (unsigned long long)host.seed);
-  // the setup's arguments: /NT no title, /J the joystick (the default, when one is plugged in), /NJ none, /A<letter> the sound driver (A the AdLib, the default; I the IBM speaker,
-  // T Tandy's, R the MT-32's, N none)
+  // the setup's arguments (over the settings, for this run): /NT no title, /J the joystick (the default, when one is
+  // plugged in), /NJ none, /A<letter> the sound driver (A the AdLib, the default; I the IBM speaker, T Tandy's, R the
+  // MT-32's, N none)
   for (int k = 2; k < argc; k++)
     if (!strcasecmp(argv[k], "/NT")) host.noTitle = true;
     else if (!strcasecmp(argv[k], "/NJ")) useJoystick = false;
@@ -642,7 +913,7 @@ int main(int argc, char **argv)
 #else
   if (host.sound == 'R') fprintf(stderr, "opensamurai: built without the MT-32 (Munt's libmt32emu): the AdLib's sound instead\n"), host.sound = 'A';
 #endif
-  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | (host.sound != 'N' ? SDL_INIT_AUDIO : 0)))
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | (host.sound != 'N' ? SDL_INIT_AUDIO : 0)))
   {
     fprintf(stderr, "opensamurai: %s\n", SDL_GetError());
     return 1;
@@ -651,7 +922,7 @@ int main(int argc, char **argv)
 #ifndef _WIN32
   if (getenv("OPENSAMURAI_WATCHDOG")) start_trace = last_fn, rp_trace = last_rp_fn, signal(SIGALRM, watchdog), alarm((unsigned)atoi(getenv("OPENSAMURAI_WATCHDOG")));
 #endif
-  if (useJoystick && !scriptJoy && SDL_NumJoysticks() > 0) joy = SDL_JoystickOpen(0);
+  if (useJoystick && !scriptJoy && SDL_NumJoysticks() > 0) joystick_open(0);
   if (!useJoystick) host.joystick = NULL;
   if (joy) fprintf(stderr, "opensamurai: the joystick: %s\n", SDL_JoystickName(joy));
   if (host.sound != 'N' && !fast)
@@ -666,12 +937,18 @@ int main(int argc, char **argv)
     else SDL_PauseAudioDevice(audioDevice, 0);
   }
   if (getenv("OPENSAMURAI_WAV")) wav = fopen(getenv("OPENSAMURAI_WAV"), "wb"), wav_header(0);
-  window = SDL_CreateWindow("Sword of the Samurai", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 960, 600, SDL_WINDOW_RESIZABLE);
+  int width = S.window_width ? S.window_width : 960, height = S.window_height ? S.window_height : S.use_correct_aspect_ratio ? 720 : 600;
+  window = SDL_CreateWindow("Sword of the Samurai", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height,
+                            SDL_WINDOW_RESIZABLE | (S.start_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0));
+  if (S.start_fullscreen) SDL_ShowCursor(SDL_DISABLE);
   renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (!renderer) renderer = SDL_CreateRenderer(window, -1, 0);
-  SDL_RenderSetLogicalSize(renderer, 320, 240);  // the VGA's 320x200 on a 4:3 screen
-  texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 200);
+  setup_video();
+  overlay_menu_host menuHost = { &S, window, renderer, menu_apply, pad_held, "" };
+  snprintf(menuHost.cfg_path, sizeof menuHost.cfg_path, "%s", cfgPath);
+  overlay_menu_init(&menuHost);
   int code = game_run(&host);
+  overlay_menu_close();
   if (wav) wav_header(wavFrames), fclose(wav);
   if (midiFile) midi_file_end();
   if (audioDevice) SDL_CloseAudioDevice(audioDevice);
