@@ -191,6 +191,9 @@ extern bool (*asm_sound_slot)(int slot);
 // the joystick's slots of MISC (95 a button, 96 the centre, 97 the position), when a frontend has a joystick: MISC's
 // own code (misc.c, recompiled) reading the game port; false if there is none (the runtimes answer no joystick)
 extern bool (*asm_misc_slot)(int slot);
+// a graphics driver slot (0-47) the host does itself, with the caller's far return address on the stack, which it
+// returns to; false: the driver's own code (MGRAPHIC's dissolve, slot 10, paced by the host's frames: game.c)
+extern bool (*asm_graphics_slot)(int slot);
 // a driver's loop that waits for the timer's interrupt to change something (the reconstruction's interrupts come
 // when the host's time goes on): the host lets it go on (the waits' back jumps call this)
 extern void (*asm_idle_hook)(void);

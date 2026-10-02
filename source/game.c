@@ -421,6 +421,40 @@ static void poll(bool wait)
 
 static void frame(void) { poll(true); }
 
+// MGRAPHIC's dissolve (slot 10, 19BD:0408; START's title, and RP's windows with a full-screen picture, 1EAA:0B66: the
+// death messages, whose portrait it dissolves away): a page copied to the screen a byte at a time in the order of a 16-bit LFSR (shift right, 0xB400 on a
+// carry; the offsets above 0xF9FF skipped), 64,000 bytes. The original paces it with a busy wait it calibrates on
+// first use (cs:0403: the smallest count with at most 533 steps between two retraces, each step reading 3DAh), and
+// the reconstruction's busy waits take no time, so the dissolve was instant. Here it takes the frames it takes in the
+// oracle (DOSBox-X): the title's first dissolve changes the screen from frame 1953 to 2068, 116 frames, 552 bytes a
+// frame (without the calibration's port read in each step the copy runs a little faster than 533). The calibration
+// word is left alone: the pace is the frames'
+#define DISSOLVE_STEPS_PER_FRAME 552
+static bool graphics_slot(int slot)
+{
+  if (slot != 10) return false;
+  uint16_t page = *(uint16_t *)far_ptr(R.ss, (uint16_t)(R.sp + 4));  // (above the far return address)
+  if (page != 0)
+  {
+    uint16_t src = *(uint16_t *)far_ptr(GAME_GRAPHICS_SEG, (uint16_t)(0x1138 + 2 * page));
+    uint16_t dst = *(uint16_t *)far_ptr(GAME_GRAPHICS_SEG, 0x1138);
+    uint16_t lfsr = 1;
+    for (unsigned n = 1; n <= 0xFA00; n++)
+    {
+      do
+      {
+        bool carry = lfsr & 1;
+        lfsr >>= 1;
+        if (carry) lfsr ^= 0xB400;
+      } while (lfsr > 0xFA00);
+      *far_ptr(dst, (uint16_t)(lfsr - 1)) = *far_ptr(src, (uint16_t)(lfsr - 1));
+      if (n % DISSOLVE_STEPS_PER_FRAME == 0) frame();
+    }
+  }
+  R.sp = (uint16_t)(R.sp + 4);  // (the far return)
+  return true;
+}
+
 // the date and the time: the host's at the start, and on with its clock
 static void clock_now(GameClock *c, uint32_t *biosTicks)
 {
@@ -1000,8 +1034,9 @@ static void rp_subgame(void *ctx, int code)
   else
   {
     r = run_melee();
-    // a melee that turns into a formal duel (shared+28 == 0, +2A == 1: the launcher's rule)
-    if (r != 0 && !shared_w(0x28) && shared_w(0x2A) == 1) r = run_duel();
+    // the launcher's rule (OLD.COM 02BF): DUEL right after the melee when shared+28 != 0 (SU's /S; 0 otherwise, and RP
+    // clears it while it runs a duel after a melee itself) and the melee asked for one (+2A == 1)
+    if (r != 0 && shared_w(0x28) && shared_w(0x2A) == 1) r = run_duel();
   }
   if (r == 0)  // the player quit (Alt-Q)
   {
@@ -1040,6 +1075,7 @@ int game_run(const GameHost *h)
   asm_idle_hook = frame;  // (a driver waiting for its tick: the next frame's interrupts)
   asm_misc_slot = haveJoystick ? misc_slot : NULL;
   rp_cheat = cheats_rp_fn, duel_cheat = cheats_duel_fn, battle_cheat = cheats_battle_fn, meleeexe_cheat = cheats_melee_fn;
+  asm_graphics_slot = graphics_slot;
   if (haveJoystick) joystick_calibrate();
   int code = run_start();
   // the launcher: RP and its exit codes (1-3 the action games, which RP runs itself while it hibernates: see
@@ -1055,5 +1091,6 @@ int game_run(const GameHost *h)
   asm_idle_hook = NULL;
   asm_misc_slot = NULL;
   rp_cheat = NULL, duel_cheat = NULL, battle_cheat = NULL, meleeexe_cheat = NULL;
+  asm_graphics_slot = NULL;
   return code;
 }

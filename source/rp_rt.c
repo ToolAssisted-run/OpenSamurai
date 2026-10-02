@@ -510,7 +510,7 @@ void rp_driver(int slot)
 {
   if (slot < 48)
   {
-    mg_slot(slot);
+    if (!asm_graphics_slot || !asm_graphics_slot(slot)) mg_slot(slot);
     return;
   }
   if (slot >= 100 && slot <= 106 && asm_sound_slot && asm_sound_slot(slot - 100)) return;  // the sound driver loaded

@@ -41,8 +41,10 @@ EXEPACK "Packed file is corrupt" A20 bug). Unpacked copies are made with the wor
   paragraphs (44 KB) → shared[+20] (picture buffer);
 - EXEC `START.EXE`; exit 0 → quit;
 - loop: EXEC `RP.EXE`; exit code 0 quit, 1 `duel.EXE`, 2 `battle.EXE`, 3 `melee.EXE`, 4 `START.EXE` (new game),
-  anything else "Invalid exit # from RP". After MELEE: if shared[+28] == 0 and shared[+2A] == 1 → `duel.EXE`
-  directly (a melee that turns into a formal duel), otherwise back to RP. After DUEL/BATTLE: exit 0 quit, else RP.
+  anything else "Invalid exit # from RP". After MELEE: if shared[+28] != 0 and shared[+2A] == 1 → `duel.EXE`
+  directly (02BF: `cmp [es:28],0 / jz back`, `cmp [es:2A],1 / jz duel`), otherwise back to RP. SU sets +28 to 0
+  (1 only with its `/S` option), and RP clears it while it runs a melee and then the duel itself (177D:3805), so in a
+  normal game RP always runs a melee's duel, with its introduction. After DUEL/BATTLE: exit 0 quit, else RP.
 - Unused strings: `ds.EXE`, `travel.exe` (programs that were merged into RP), `c:\c\bin\cv.exe` (CodeView).
 
 The game state crosses the program boundary through the shared block and `TALLTALE.DAT`.
@@ -326,7 +328,7 @@ Frames pass with the frontend's clock (70.086 Hz) whenever a program looks at th
 come from a model of the PIT (5.8), and the running program's handler runs at each once it has hooked INT 8; RP's and DUEL's INT 9 handlers (a keyboard joystick) are emulated
 from the frontend's scan codes. frontend/main.c: SDL2, mode 13h through the DAC, the BIOS's keys; scripted runs
 (OPENSAMURAI_KEYS, _SCANS, _SHOTS, _FRAMES, _FAST). The melee runs with its EGA driver, shown through the VGA
-emulation; a melee that turns into a duel runs the duel after it (the launcher's rule). RP's saved games are
+emulation; a melee is followed by DUEL only by the launcher's rule (§2: SU's `/S`), RP running it otherwise. RP's saved games are
 written to the game directory (Alt-S at the Home Option scroll). RP refuses to save on the original disk
 (168c:0120 compares the drive's volume label with the floppy's): the game's directory is not it. The IBM speaker's and Tandy's
 sounds are the frontend's `/AI` and `/AT` (5.8, 5.9), the AdLib's `/AA`, the default (5.10); the MT-32's `/AR` (5.11). The joystick (5.12).
@@ -364,6 +366,19 @@ machine's melee, flag DS:342A set, and about 700 passes a frame). A real clock n
 game_setup clears the sound driver's segment (D000:0000-FFFF) with the rest of memory, and the launcher's
 read-ahead key and port 3DA's retrace toggle: the MT-32's driver reads a note table past its file's image, which a
 game before it in the same process would otherwise have left there.
+
+### 5.7c The dissolve's pace
+
+MGRAPHIC's dissolve (slot 10, 0408) copies a page to the screen a byte at a time in a 16-bit LFSR's order (shift
+right, 0xB400 on a carry, the values above 0xFA00 skipped, offset = value − 1). It is START's title and RP's windows
+with a full-screen picture (window +31 or +37 = 2, drawn by 1EAA:04A2 through 1EAA:0B66 with page 1): the death
+messages (windows 14, 17, 18, 59, 60, 64, 68, 71, 74, 119, 120, 124, 138, 149, 150, 173-175, 200, 220), where it is the
+dead character's portrait dissolving away. Its pace is a busy wait (`mov ax,bx / dec ax / jnz`) calibrated on first
+use: the smallest count bx with at most 0x215 (533) steps between two vertical retraces, each step reading 3DAh. So it
+takes about two seconds on any machine fast enough, and was instant in OpenSamurai, where a busy wait costs nothing.
+game.c runs it itself (`asm_graphics_slot`) at the oracle's pace: the title's first dissolve changes the screen from
+frame 1953 to 2068 in DOSBox-X, 116 frames, 552 bytes a frame (the copy has no port read in its steps and runs a
+little faster than the calibration's 533). A forced window 60 in RP now dissolves the portrait in 116 frames too.
 
 ### 5.8 Sound: the IBM speaker (ISOUND.SAM) — recompiled whole in source/isound.c, verified
 
@@ -811,6 +826,8 @@ F-keys not at all; decoded with the workspace's work/jrsrkeys.py.
 
 ## 8. Log
 
+- 2026-10-02: the dissolve paced as in the original (5.7c: a dead character's portrait fades in two seconds); the
+  launcher's MELEE → DUEL rule read the right way round (§2: the lord's assassination was fought twice).
 - 2026-10-02: cheats (5.15); the battle runs in the frontend (its timer handler is 1883:015F, not 0160); RP's
   keyboard joystick hook made (the travel map's held keys).
 - 2026-09-28: the rules read out of the verified code for the game guide (5.14): the duel's unsigned skill
