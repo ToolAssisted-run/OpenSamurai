@@ -214,18 +214,11 @@ i16 _dos_read(i16 h, u16 off, u16 seg, u16 n, i16 pn)
   return 0;
 }
 
-// saving: the saved games, when the host lets RP write (the frontend); the tests' writes succeed without a file
-i16 _dos_creat(i16 name, i16 attr, i16 ph)
+// a file of the game directory created (or emptied) for writing: the name as DOS makes it (upper case), or the
+// file of that name in any case already there
+static FILE *create_game_file(const char *n)
 {
-  (void)attr;
-  if (!host || !host->writeFiles)
-  {
-    *P16((u16)ph) = 19;
-    return 0;
-  }
-  // the file as DOS names it (upper case), or the one of that name in any case already there
   char upper[80];
-  const char *n = NEAR((u16)name);
   int k = 0;
   for (; n[k] && k < 79; k++) upper[k] = (char)(n[k] >= 'a' && n[k] <= 'z' ? n[k] - 32 : n[k]);
   upper[k] = 0;
@@ -242,6 +235,19 @@ i16 _dos_creat(i16 name, i16 attr, i16 ph)
   }
   FILE *f = fopen(path, "wb");
   if (DEBUG_FILES) fprintf(stderr, "rp: create %s -> %s\n", path, f ? "ok" : "failed");
+  return f;
+}
+
+// saving: the saved games, when the host lets RP write (the frontend); the tests' writes succeed without a file
+i16 _dos_creat(i16 name, i16 attr, i16 ph)
+{
+  (void)attr;
+  if (!host || !host->writeFiles)
+  {
+    *P16((u16)ph) = 19;
+    return 0;
+  }
+  FILE *f = create_game_file(NEAR((u16)name));
   if (!f) return 5;
   for (int h = 5; h < 20; h++)
     if (!files[h].f)
@@ -296,11 +302,66 @@ i16 rp_int86(i16 n, i16 in, i16 out)
   return (i16)asm_msc_int86((u8)n, (u16)in, (u16)out, &rpErrno);
 }
 
-// the C library's stream functions (the scroll of honour, the saved game): not in the tests yet
-i16 rp_fopen(i16 name, i16 mode) { (void)mode; fprintf(stderr, "rp: fopen %s\n", NEAR((u16)name)); return 0; }
-i16 rp_fclose(i16 f) { (void)f; return 0; }
-i16 rp_fread(i16 buf, i16 size, i16 n, i16 f) { (void)buf; (void)size; (void)n; (void)f; return 0; }
-i16 rp_fwrite(i16 buf, i16 size, i16 n, i16 f) { (void)buf; (void)size; (void)f; return n; }
+// the C library's streams (202e:0306 fopen, 0332 fread, 0524 fwrite, 023e fclose), which the Shogun's ending reads
+// and rewrites the Scroll of Honor (HONOR.SCL) with. A stream is one of the library's FILE entries (DS:3518, 8 bytes:
+// +6 the flags, 1 read, 2 write; +7 the handle), the first free one up to DS:3630's, as its _getstream (202e:117E)
+// takes it; its file is one of the handles above (without a file when the host does not let RP write: the tests)
+#define IOB 0x3518
+#define IOB_FLAGS 6
+#define IOB_FILE 7
+i16 rp_fopen(i16 name, i16 mode)
+{
+  u16 f = IOB, last = *P16(0x3630);
+  while (*P8(f + IOB_FLAGS) & 0x83)
+  {
+    if (f == last) return 0;
+    f = (u16)(f + 8);
+  }
+  char m = NEAR((u16)mode)[0];
+  int h = 5;
+  for (; h < 20 && files[h].f; h++) {}
+  if (h == 20) return 0;
+  FILE *file = NULL;
+  if (m == 'r') file = open_game_file(NEAR((u16)name));
+  else if (m == 'w' && host && host->writeFiles) file = create_game_file(NEAR((u16)name));
+  else if (m != 'w') return 0;  // (RP opens nothing else)
+  if (DEBUG_FILES) fprintf(stderr, "rp: fopen %s %s -> %s\n", NEAR((u16)name), NEAR((u16)mode), file ? "ok" : "none");
+  if (!file && (m == 'r' || (host && host->writeFiles))) return 0;
+  files[h].f = file;
+  memset(P8(f), 0, 6);
+  *P8(f + IOB_FLAGS) = m == 'r' ? 1 : 2;
+  *P8(f + IOB_FILE) = (u8)h;
+  return (i16)f;
+}
+static FILE *stream_file(i16 f) { return f ? files[*P8((u16)f + IOB_FILE) % 20].f : NULL; }
+i16 rp_fclose(i16 f)
+{
+  if (!f || !(*P8((u16)f + IOB_FLAGS) & 0x83)) return -1;
+  u8 h = *P8((u16)f + IOB_FILE) % 20;
+  if (files[h].f) fclose(files[h].f);
+  files[h].f = NULL;
+  *P8((u16)f + IOB_FLAGS) = 0;
+  *P8((u16)f + IOB_FILE) = 0xFF;
+  return 0;
+}
+i16 rp_fread(i16 buf, i16 size, i16 n, i16 f)
+{
+  FILE *file = stream_file(f);
+  if (!file || size <= 0 || n <= 0) return 0;
+  u32 want = (u32)(u16)size * (u16)n, k = 0;
+  for (int c; k < want && (c = fgetc(file)) != EOF; k++) *P8((u16)(buf + k)) = (u8)c;
+  return (i16)(k / (u16)size);
+}
+i16 rp_fwrite(i16 buf, i16 size, i16 n, i16 f)
+{
+  if (!f || size <= 0 || n <= 0) return 0;
+  FILE *file = stream_file(f);
+  if (!file) return n;  // (no file: the tests)
+  u32 want = (u32)(u16)size * (u16)n, k = 0;
+  for (; k < want; k++)
+    if (fputc(*P8((u16)(buf + k)), file) == EOF) break;
+  return (i16)(k / (u16)size);
+}
 i16 _filbuf(i16 f) { (void)f; return -1; }
 i16 _flsbuf(i16 c, i16 f) { (void)f; return c; }
 i16 rp_close(i16 h) { return _dos_close(h); }

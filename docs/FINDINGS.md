@@ -819,6 +819,10 @@ checked against the originals:
   18B4), 120 after a save or a restore (2817:0004) and in the Shogun's ending (2567:0000), 10 before a full-screen
   picture's dissolve (1EAA:0B66), 30 in Alt-J's calibration, 3 after a joystick button's release (1000:05CA), and
   the menu cursor's slide between rows, a frame a step (1CEC:0846).
+- RP's C library streams (fopen, fread, fwrite, fclose) were stubs that opened nothing: the Shogun's ending
+  (2567:0000) read no Scroll of Honor and recorded no one in it. They now use the library's FILE entries (DS:3518,
+  the first free one up to DS:3630's, as 202e:117E takes it) over the game directory's HONOR.SCL (7 records of 36
+  bytes read, then all rewritten).
 
 ## 6. Methods
 
