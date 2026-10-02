@@ -475,6 +475,7 @@ enum setting_ids {
 	SETTING_CHEAT_WALK_MAP,
 	SETTING_CHEAT_NO_ENCOUNTERS,
 	SETTING_CHEAT_WALK_MELEE,
+	SETTING_CHEAT_STEALTH,
 	SETTING_CHEAT_STOP_AGEING,
 	SETTING_CHEAT_MAX_HONOR,
 	SETTING_CHEAT_MAX_TROOPS,
@@ -616,6 +617,10 @@ static setting_type cheats_settings[] = {
 				CHEAT(walkMelee), .names_list = &speed_setting_names_list, .required = &cheats_available,
 				.text = "Faster walk (melee)",
 				.explanation = "You walk faster in melees (the others do not)."},
+		{.id = SETTING_CHEAT_STEALTH, .style = SETTING_STYLE_TOGGLE, CHEAT(stealth), .required = &cheats_available,
+				.text = "Stealth mode (melee)",
+				.explanation = "In castles and manors nobody notices you and the alarm\n"
+						"never sounds (one raised before stays raised)."},
 		{.id = SETTING_CHEAT_STOP_AGEING, .style = SETTING_STYLE_TOGGLE, CHEAT(stopAgeing), .required = &cheats_available,
 				.text = "Stop ageing",
 				.explanation = "You and your family stop ageing.\n"

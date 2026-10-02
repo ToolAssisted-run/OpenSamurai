@@ -765,6 +765,16 @@ DS:7F34).
   back if the cheat goes off during the walk).
 - Faster walk (melee): the player's sub-step 1000:876E(0) takes 2 or 4 pixels instead of DS:3564 (dividing what is
   left of the tile's four), the move timer DS:0058 shortened for the rest of the factor; the others keep DS:3564.
+- Stealth mode (melee): while the alarm DS:3434 is off (castles and manors; it starts on elsewhere, in the player's
+  own house and in mission 5). Nobody's behaviour state DS:734C + e becomes 2 (alert, hunting): its two setters,
+  1000:AA12 and AA24 (the spawns), are given 1 instead for anyone but the player. "Sees the player" (1000:6AC8: the
+  same room, or DS:9D90 + e) answers 0, so the recognition (1000:BA90, DS:9DD5 + e) and the noticing of an attack
+  (1000:A50E, DS:72D0 + e) never happen. Skipped: the alarm (1000:3CCE), the player's cell shared (1000:BA4C), a
+  corpse noticed (1000:2EB6, which also sends the guards to the player's cell) and the nightingale floor under the
+  player (1000:85E2(0)). Guards still keep three cells away (the encounter check 1000:1E7C blocks the move, as it does
+  between any two), turn and go on with their rounds; struck ones do not fight back. In the practice melee (a castle,
+  mission 0x1A) a scripted fight with one-blow kills raises the alarm at frame 6700 without it, never with it. MELEE's
+  FN hook may now skip a function, as DUEL's does.
 - Stop ageing: at the entry of the ageing 1568:013E, the tick it is about to add is taken back from the player's age
   (master block +02) and the family words it will age (the first n of the master block, n = the non-empty words of the
   working block, as 1568:000A counts them); an age on a whole year is let through one tick first, so that the year's

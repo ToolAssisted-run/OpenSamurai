@@ -822,7 +822,7 @@ static void menu_run(void)
 static overlay_menu_cheats menuCheats;
 static int speed_index(int k) { return k >= 8 ? 3 : k >= 4 ? 2 : k >= 2 ? 1 : 0; }
 #define CHEAT_FIELDS(X) X(invulnerableMelee) X(invulnerableDuel) X(oneBlowKills) X(invulnerableTroops) X(troopsNeverRout) \
-  X(noEncounters) X(stopAgeing) X(maxHonor) X(maxTroops) X(maxLand) X(maxSwordsmanship) X(maxGeneralship)
+  X(noEncounters) X(stealth) X(stopAgeing) X(maxHonor) X(maxTroops) X(maxLand) X(maxSwordsmanship) X(maxGeneralship)
 static void cheats_to_menu(void)
 {
 #define TO_MENU(f) menuCheats.f = game_cheats.f;
@@ -877,7 +877,7 @@ static int settings_files(const char *gameDir, char *ini, size_t iniSize, char *
 
 // OPENSAMURAI_CHEATS="NAME[=N] ...": cheats on from the start (scripted runs; the in-game menu's CHEATS page sets
 // them otherwise): invulnerable_melee, invulnerable_duel, one_blow_kills, invulnerable_troops, never_rout,
-// faster_troops=N, walk_map=N, no_encounters, walk_melee=N (N 1, 2, 4 or 8), stop_ageing, max_honor, max_troops, max_land, max_swordsmanship, max_generalship
+// faster_troops=N, walk_map=N, no_encounters, walk_melee=N (N 1, 2, 4 or 8), stealth, stop_ageing, max_honor, max_troops, max_land, max_swordsmanship, max_generalship
 static void script_cheats(const char *list)
 {
   static const struct { const char *name; int *on; } names[] = {
@@ -885,7 +885,8 @@ static void script_cheats(const char *list)
     { "one_blow_kills", &game_cheats.oneBlowKills }, { "no_encounters", &game_cheats.noEncounters },
     { "invulnerable_troops", &game_cheats.invulnerableTroops }, { "never_rout", &game_cheats.troopsNeverRout },
     { "faster_troops", &game_cheats.fasterTroops },
-    { "walk_map", &game_cheats.walkMap }, { "walk_melee", &game_cheats.walkMelee }, { "stop_ageing", &game_cheats.stopAgeing },
+    { "walk_map", &game_cheats.walkMap }, { "walk_melee", &game_cheats.walkMelee }, { "stealth", &game_cheats.stealth },
+    { "stop_ageing", &game_cheats.stopAgeing },
     { "max_honor", &game_cheats.maxHonor }, { "max_troops", &game_cheats.maxTroops }, { "max_land", &game_cheats.maxLand },
     { "max_swordsmanship", &game_cheats.maxSwordsmanship }, { "max_generalship", &game_cheats.maxGeneralship },
   };

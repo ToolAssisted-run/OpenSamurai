@@ -18,6 +18,7 @@ typedef struct
   int walkMap;             // RP: the travel map's walk 1, 2, 4 or 8 times as fast (the walking loop 2706:0000)
   int noEncounters;        // RP: no encounters on the travel map (the roll 2706:0C0A finds the trip's three used)
   int walkMelee;           // MELEE: the player walks 1, 2, 4 or 8 times as fast (the sub-step 1000:876E)
+  int stealth;             // MELEE: while the alarm is off (castles, manors), nobody notices the player (1000:AA12, 6AC8)
   int stopAgeing;          // RP: the player and his family do not age (the ageing 1568:013E)
   int maxHonor;            // RP: the player's honor held at 128 (112, the honor routine's cap, plus the family's 16)
   int maxTroops;           // RP: the player's troops held at 128 (the troops routine's cap)
@@ -28,12 +29,12 @@ typedef struct
 
 extern GameCheats game_cheats;
 
-// the hooks (game.c installs them): a function entry of each program; DUEL's returns 1 when the function is skipped
-// (its return address popped)
+// the hooks (game.c installs them): a function entry of each program; DUEL's and MELEE's return 1 when the function
+// is skipped (its return address popped)
 void cheats_rp_fn(uint32_t addr);
 int cheats_duel_fn(uint32_t addr);
 void cheats_battle_fn(uint32_t addr);
-void cheats_melee_fn(uint32_t addr);
+int cheats_melee_fn(uint32_t addr);
 // RP's video frames (while RP runs): the attributes held
 void cheats_rp_frame(void);
 // RP's frame wait (DS:3038): 1 when the travel map's walking loop takes this step without waiting for its frames

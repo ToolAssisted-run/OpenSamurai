@@ -13,12 +13,19 @@
 #include "meleeexe_rt.h"
 #include "lzw.h"
 
+// (the run-time's own functions are traced but never skipped: some return a value)
+#undef FN
+#define FN(addr) \
+  do { \
+    if (meleeexe_trace) meleeexe_trace(addr); \
+  } while (0)
+
 #define MELEE_CS 0x27CC
 #define MELEE_PSP 0x27BC
 
 static const MeleeExeHost *host;
 void (*meleeexe_trace)(uint32_t addr);
-void (*meleeexe_cheat)(uint32_t addr);
+int (*meleeexe_cheat)(uint32_t addr);
 static jmp_buf exitJump;
 static bool exitArmed;
 

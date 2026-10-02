@@ -181,17 +181,50 @@ void cheats_battle_fn(uint32_t addr)
 // times the terrain, the turn and the wounds) and the sub-step (1000:876E(e)) takes DS:3564 (1, a slow machine's 2)
 // off the tile move's four (DS:AEFC + e). For the player that sub-step is made 2 or 4 (dividing what is left of the
 // tile), and the rest of the speed comes from a shorter delay; for the others it stays the game's
-static uint8_t meleeStep, meleeWritten;
-void cheats_melee_fn(uint32_t addr)
+// Stealth, while the alarm DS:3434 is off (it starts on outside castles and manors, in the player's own house and in
+// mission 5): no one's behaviour state DS:734C + e becomes 2 (alert: hunting the player) - its setters 1000:AA12 and
+// AA24 (the spawns) make it 1 (unaware) instead -, and "sees the player" (1000:6AC8: the same room, or DS:9D90 + e)
+// answers no, so that nobody identifies him (DS:9DD5 + e, 1000:BA90) or notices his attack (1000:A50E). The alarm
+// (1000:3CCE) is not raised, and the sightings that would act on their own are skipped: sharing the player's cell
+// (1000:BA4C: DS:9D90 + e), a corpse noticed (1000:2EB6: the guards sent to the player's cell) and the nightingale
+// floor under the player (1000:85E2(0): the alarm, or the guards sent to his cell). An alarm already raised stays
+static int melee_skip(void)
 {
+  R.sp = (uint16_t)(R.sp + 2);  // (the near return)
+  return 1;
+}
+static int melee_stealth(uint32_t addr)
+{
+  if (!game_cheats.stealth || *far_ptr(R.ds, 0x3434) != 0) return 0;
+  switch (addr)
+  {
+  case 0x1000AA12:
+  case 0x1000AA24:
+    if ((uint8_t)arg(0) != 0 && (uint8_t)arg(1) == 2) wr16(R.ss, (uint16_t)(R.sp + 4), 1);  // (the player's is his own)
+    return 0;
+  case 0x10006AC8:
+    R.ax = 0;
+    return melee_skip();
+  case 0x10003CCE:
+  case 0x1000BA4C:
+  case 0x10002EB6: return melee_skip();
+  case 0x100085E2: return (uint8_t)arg(0) == 0 && melee_skip();
+  }
+  return 0;
+}
+
+static uint8_t meleeStep, meleeWritten;
+int cheats_melee_fn(uint32_t addr)
+{
+  if (melee_stealth(addr)) return 1;
   if (addr == 0x1000A7CC)
   {
     *far_ptr(R.ds, 0x3567) = game_cheats.invulnerableMelee ? 1 : 0;
     uint8_t e = (uint8_t)arg(0), *wounds = far_ptr(R.ds, (uint16_t)(0x9E18 + e));
     if (e != 0 && e < 7 && game_cheats.oneBlowKills && *wounds < 1) *wounds = 1;
-    return;
+    return 0;
   }
-  if (addr != 0x1000876E) return;
+  if (addr != 0x1000876E) return 0;
   uint8_t *step = far_ptr(R.ds, 0x3564);
   if (*step != meleeWritten || !meleeStep) meleeStep = *step;  // (the game's own: 1, or 2)
   int e = (uint8_t)arg(0), want = meleeStep, s = meleeStep;
@@ -207,4 +240,5 @@ void cheats_melee_fn(uint32_t addr)
     }
   }
   *step = meleeWritten = (uint8_t)s;
+  return 0;
 }
