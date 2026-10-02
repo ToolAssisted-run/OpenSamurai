@@ -468,10 +468,12 @@ enum setting_ids {
 	SETTING_SCALING_TYPE,
 	SETTING_CHEAT_INVULNERABLE_MELEE, // OpenSamurai: the CHEATS page
 	SETTING_CHEAT_INVULNERABLE_DUEL,
+	SETTING_CHEAT_ONE_BLOW_KILLS,
 	SETTING_CHEAT_INVULNERABLE_TROOPS,
 	SETTING_CHEAT_NEVER_ROUT,
 	SETTING_CHEAT_FASTER_TROOPS,
 	SETTING_CHEAT_WALK_MAP,
+	SETTING_CHEAT_NO_ENCOUNTERS,
 	SETTING_CHEAT_WALK_MELEE,
 	SETTING_CHEAT_STOP_AGEING,
 	SETTING_CHEAT_MAX_HONOR,
@@ -586,6 +588,10 @@ static setting_type cheats_settings[] = {
 		{.id = SETTING_CHEAT_INVULNERABLE_DUEL, .style = SETTING_STYLE_TOGGLE, CHEAT(invulnerableDuel), .required = &cheats_available,
 				.text = "Invulnerable (duel)",
 				.explanation = "Your opponent's blows never wound you or knock you back in duels."},
+		{.id = SETTING_CHEAT_ONE_BLOW_KILLS, .style = SETTING_STYLE_TOGGLE, CHEAT(oneBlowKills), .required = &cheats_available,
+				.text = "One-blow kills (duel, melee)",
+				.explanation = "Your first blow that lands fells your opponent in duels,\n"
+						"and anyone you strike in melees."},
 		{.id = SETTING_CHEAT_INVULNERABLE_TROOPS, .style = SETTING_STYLE_TOGGLE, CHEAT(invulnerableTroops), .required = &cheats_available,
 				.text = "Invulnerable troops (battle)",
 				.explanation = "Your units lose no men to the enemy's attacks in battles."},
@@ -602,6 +608,10 @@ static setting_type cheats_settings[] = {
 				.text = "Faster walk (map)",
 				.explanation = "Walk faster on the province maps.\n"
 						"Encounters come every few seconds, so a trip brings fewer of them."},
+		{.id = SETTING_CHEAT_NO_ENCOUNTERS, .style = SETTING_STYLE_TOGGLE, CHEAT(noEncounters), .required = &cheats_available,
+				.text = "No travel encounters",
+				.explanation = "Nobody stops you on the province maps: no bandits, ronin or duellists.\n"
+						"(The game's own limit of three a trip, reached from the start.)"},
 		{.id = SETTING_CHEAT_WALK_MELEE, .style = SETTING_STYLE_NUMBER, .number_type = SETTING_INT, .max = 3,
 				CHEAT(walkMelee), .names_list = &speed_setting_names_list, .required = &cheats_available,
 				.text = "Faster walk (melee)",

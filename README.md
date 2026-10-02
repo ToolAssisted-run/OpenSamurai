@@ -109,10 +109,12 @@ The in-game menu's CHEATS page turns these on and off at any time. They are not 
 |---|---|
 | Invulnerable (melee) | Blows and arrows never wound you in melees. This is the game's own debug switch, which the original never turns on; you still stagger when hit. |
 | Invulnerable (duel) | Your opponent's blows never wound you or knock you back in duels. |
+| One-blow kills (duel, melee) | Your first blow that lands fells your opponent in a duel, and anyone you strike in a melee. |
 | Invulnerable troops (battle) | Your units lose no men to the enemy's attacks. |
 | Troops never rout (battle) | Your units never break and flee on their own. R still orders the retreat. |
 | Faster troops (battle) | Your units march and turn 2, 4 or 8 times as fast; the enemy's do not. |
 | Faster walk (map) | You walk 2, 4 or 8 times as fast on the province maps. The game rolls for an encounter every few seconds, so a trip brings fewer of them. |
+| No travel encounters | Nobody stops you on the province maps: no bandits, ronin, pirates or duellists. |
 | Faster walk (melee) | You walk 2, 4 or 8 times as fast in melees; the others do not. |
 | Stop ageing | You and your family stop ageing. Your rivals, the lords and their families age as usual. |
 | Max honor | Your honor stays at 128, the most the game allows: its honor routine caps honor at 112 and adds up to 16 for a wife (4), an heir (8) and two more children (2 each). |

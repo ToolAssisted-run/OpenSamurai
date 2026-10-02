@@ -821,19 +821,23 @@ static void menu_run(void)
 // the CHEATS page's switches, and the game's (source/cheats.h): the speeds 0..3 there, 1, 2, 4, 8 here
 static overlay_menu_cheats menuCheats;
 static int speed_index(int k) { return k >= 8 ? 3 : k >= 4 ? 2 : k >= 2 ? 1 : 0; }
+#define CHEAT_FIELDS(X) X(invulnerableMelee) X(invulnerableDuel) X(oneBlowKills) X(invulnerableTroops) X(troopsNeverRout) \
+  X(noEncounters) X(stopAgeing) X(maxHonor) X(maxTroops) X(maxLand) X(maxSwordsmanship) X(maxGeneralship)
 static void cheats_to_menu(void)
 {
-  menuCheats = (overlay_menu_cheats){ game_cheats.invulnerableMelee, game_cheats.invulnerableDuel, game_cheats.invulnerableTroops,
-                                      game_cheats.troopsNeverRout, speed_index(game_cheats.fasterTroops), speed_index(game_cheats.walkMap),
-                                      speed_index(game_cheats.walkMelee), game_cheats.stopAgeing, game_cheats.maxHonor,
-                                      game_cheats.maxTroops, game_cheats.maxLand, game_cheats.maxSwordsmanship, game_cheats.maxGeneralship };
+#define TO_MENU(f) menuCheats.f = game_cheats.f;
+  CHEAT_FIELDS(TO_MENU)
+  menuCheats.fasterTroops = speed_index(game_cheats.fasterTroops);
+  menuCheats.walkMap = speed_index(game_cheats.walkMap);
+  menuCheats.walkMelee = speed_index(game_cheats.walkMelee);
 }
 static void cheats_from_menu(void)
 {
-  game_cheats = (GameCheats){ menuCheats.invulnerableMelee, menuCheats.invulnerableDuel, menuCheats.invulnerableTroops,
-                              menuCheats.troopsNeverRout, 1 << menuCheats.fasterTroops, 1 << menuCheats.walkMap, 1 << menuCheats.walkMelee,
-                              menuCheats.stopAgeing, menuCheats.maxHonor, menuCheats.maxTroops, menuCheats.maxLand,
-                              menuCheats.maxSwordsmanship, menuCheats.maxGeneralship };
+#define FROM_MENU(f) game_cheats.f = menuCheats.f;
+  CHEAT_FIELDS(FROM_MENU)
+  game_cheats.fasterTroops = 1 << menuCheats.fasterTroops;
+  game_cheats.walkMap = 1 << menuCheats.walkMap;
+  game_cheats.walkMelee = 1 << menuCheats.walkMelee;
 }
 
 // how the menu's settings take effect (overlay_menu_host.apply); the volume is read as the sound goes out
@@ -872,12 +876,13 @@ static int settings_files(const char *gameDir, char *ini, size_t iniSize, char *
 }
 
 // OPENSAMURAI_CHEATS="NAME[=N] ...": cheats on from the start (scripted runs; the in-game menu's CHEATS page sets
-// them otherwise): invulnerable_melee, invulnerable_duel, invulnerable_troops, never_rout, faster_troops=N, walk_map=N,
-// walk_melee=N (N 1, 2, 4 or 8), stop_ageing, max_honor, max_troops, max_land, max_swordsmanship, max_generalship
+// them otherwise): invulnerable_melee, invulnerable_duel, one_blow_kills, invulnerable_troops, never_rout,
+// faster_troops=N, walk_map=N, no_encounters, walk_melee=N (N 1, 2, 4 or 8), stop_ageing, max_honor, max_troops, max_land, max_swordsmanship, max_generalship
 static void script_cheats(const char *list)
 {
   static const struct { const char *name; int *on; } names[] = {
     { "invulnerable_melee", &game_cheats.invulnerableMelee }, { "invulnerable_duel", &game_cheats.invulnerableDuel },
+    { "one_blow_kills", &game_cheats.oneBlowKills }, { "no_encounters", &game_cheats.noEncounters },
     { "invulnerable_troops", &game_cheats.invulnerableTroops }, { "never_rout", &game_cheats.troopsNeverRout },
     { "faster_troops", &game_cheats.fasterTroops },
     { "walk_map", &game_cheats.walkMap }, { "walk_melee", &game_cheats.walkMelee }, { "stop_ageing", &game_cheats.stopAgeing },

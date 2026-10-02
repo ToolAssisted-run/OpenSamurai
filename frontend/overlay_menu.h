@@ -35,8 +35,8 @@ enum
 // 4x, 8x
 typedef struct overlay_menu_cheats
 {
-  int invulnerableMelee, invulnerableDuel, invulnerableTroops, troopsNeverRout, fasterTroops, walkMap, walkMelee,
-      stopAgeing, maxHonor, maxTroops, maxLand, maxSwordsmanship, maxGeneralship;
+  int invulnerableMelee, invulnerableDuel, oneBlowKills, invulnerableTroops, troopsNeverRout, fasterTroops, walkMap,
+      noEncounters, walkMelee, stopAgeing, maxHonor, maxTroops, maxLand, maxSwordsmanship, maxGeneralship;
 } overlay_menu_cheats;
 
 typedef struct overlay_menu_host

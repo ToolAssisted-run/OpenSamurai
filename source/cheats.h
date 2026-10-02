@@ -11,10 +11,12 @@ typedef struct
 {
   int invulnerableMelee;   // MELEE: the player takes no wound (its own debug switch DS:3567, at the wound 1000:A7CC)
   int invulnerableDuel;    // DUEL: the player's wound (1000:1624: the wound, the knock-back, the fall) does not happen
+  int oneBlowKills;        // DUEL, MELEE: the player's first blow fells the opponent (the wound routines' counts)
   int invulnerableTroops;  // BATTLE: the player's units lose no men to damage (1000:0A1C applies none)
   int troopsNeverRout;     // BATTLE: the player's units never rout on their own (1000:2424); R's retreat still works
   int fasterTroops;        // BATTLE: the player's units march and turn 1, 2, 4 or 8 times as fast (1000:2802)
   int walkMap;             // RP: the travel map's walk 1, 2, 4 or 8 times as fast (the walking loop 2706:0000)
+  int noEncounters;        // RP: no encounters on the travel map (the roll 2706:0C0A finds the trip's three used)
   int walkMelee;           // MELEE: the player walks 1, 2, 4 or 8 times as fast (the sub-step 1000:876E)
   int stopAgeing;          // RP: the player and his family do not age (the ageing 1568:013E)
   int maxHonor;            // RP: the player's honor held at 128 (112, the honor routine's cap, plus the family's 16)

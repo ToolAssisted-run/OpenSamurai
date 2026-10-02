@@ -730,6 +730,9 @@ DS:7F34).
   the player's wound increment; the stagger (state 0x2C) remains.
 - Invulnerable (duel): the wound 1000:1624(fighter) skipped for the player (fighter 0): no wound, no knock-back, no
   fall. DUEL's FN hook may skip a function (its functions are void; the hook pops the near return address).
+- One-blow kills: the duel's opponent (fighter 1) enters the wound 1000:1624 with three wounds (DS:4DBA), so that
+  the blow is his fourth and he falls; in the melee any entity but the player enters the wound 1000:A7CC with one
+  (DS:9E18 + e), so that the blow (1 or 2 wounds, DS:235E) brings it to the 2 at which it dies (1000:13B8).
 - Invulnerable troops / troops never rout (battle): at the damage pass 1000:0A1C(unit) a player unit's gathered
   damage (+2A) is zeroed; at the rout check 1000:2424(unit) a player unit's step morale (+30) below 0 is lifted to 0
   (a unit already routed, state 11, is left alone: the check would rally it). R's retreat sets state 11 and morale 0
@@ -741,6 +744,10 @@ DS:7F34).
   multiplied at the entry, the route's pace put back for the enemy's.
 - Faster walk (map): the walking loop 2706:0000 waits for DS:3038 > 2 (three frames) before each step; k − 1 of every
   k steps go without the wait (the loop is known by its caller's return address, 3DE7:0214, at BP + 2).
+- No travel encounters: the roll 2706:0C0A (every five seconds of the walk: random(100) < 50, then the tile class's
+  row of types, random(8)) offers an encounter only while the trip's count of accepted ones, DS:3DB4 (zeroed at the
+  walk's start, 2706:0006), is below 3: the roll finds it at 3 (the dice are thrown as before; the count it had comes
+  back if the cheat goes off during the walk).
 - Faster walk (melee): the player's sub-step 1000:876E(0) takes 2 or 4 pixels instead of DS:3564 (dividing what is
   left of the tile's four), the move timer DS:0058 shortened for the rest of the factor; the others keep DS:3564.
 - Stop ageing: at the entry of the ageing 1568:013E, the tick it is about to add is taken back from the player's age

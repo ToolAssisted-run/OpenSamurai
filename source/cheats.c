@@ -52,8 +52,30 @@ void cheats_rp_frame(void)
 // year (age % 10 == 0) the year's changes (the old age's losses, the player's "too old" at 90). Stopped for the player
 // by taking back, at its entry, the tick it is about to add: the age stays, and a year never comes round (an age on a
 // whole year is let through one tick first, so that the next is not)
+// the travel encounters: every few seconds the walking loop rolls one (2706:0C0A: random(100) < 50, then the tile's
+// row of types, random(8)), and offers it unless the trip's count of accepted encounters, DS:3DB4 (zeroed when the
+// walk starts, 2706:0006), has reached 3. Without encounters, the roll finds that count at 3: the dice are thrown as
+// before, nothing is offered. The count it had is put back when the cheat goes off during the walk
+static int savedEncounters = -1;
+static void rp_encounters(uint32_t addr)
+{
+  if (addr == 0x27060000) savedEncounters = -1;  // (a new walk: the game zeroes the count)
+  if (addr != 0x27060C0A) return;
+  if (game_cheats.noEncounters)
+  {
+    if (savedEncounters < 0) savedEncounters = rd16(RP_DS, 0x3DB4);
+    wr16(RP_DS, 0x3DB4, 3);
+  }
+  else if (savedEncounters >= 0)
+  {
+    wr16(RP_DS, 0x3DB4, (uint16_t)savedEncounters);
+    savedEncounters = -1;
+  }
+}
+
 void cheats_rp_fn(uint32_t addr)
 {
+  rp_encounters(addr);
   if (addr != 0x1568013E || !game_cheats.stopAgeing) return;
   uint16_t age = rd16(RP_DS, RP_MASTER + 0x02);
   if (age % 10 != 0) wr16(RP_DS, RP_MASTER + 0x02, (uint16_t)(age - 1));
@@ -83,11 +105,14 @@ int cheats_rp_walk_step(void)
 
 // ---------------------------------------------------------------- DUEL
 
-// wound(fighter) (1000:1624, a near function): the wound, the knock-back, the fall at four; for the player (0) it
-// does not happen
+// wound(fighter) (1000:1624, a near function): one wound (two for half the over-the-shoulder hacks), the knock-back,
+// the fall at four (the fighters' counts DS:4DB8 + 2 × fighter). Invulnerable: for the player (0) it does not happen.
+// One-blow kills: the opponent (1) enters it with three, so that this wound is his fourth
 int cheats_duel_fn(uint32_t addr)
 {
-  if (addr != 0x10001624 || !game_cheats.invulnerableDuel || arg(0) != 0) return 0;
+  if (addr != 0x10001624) return 0;
+  if (arg(0) == 1 && game_cheats.oneBlowKills && (int16_t)rd16(R.ds, 0x4DBA) < 3) wr16(R.ds, 0x4DBA, 3);
+  if (!game_cheats.invulnerableDuel || arg(0) != 0) return 0;
   R.sp = (uint16_t)(R.sp + 2);  // (the near return)
   return 1;
 }
@@ -148,8 +173,10 @@ void cheats_battle_fn(uint32_t addr)
 
 // ---------------------------------------------------------------- MELEE
 
-// The wound (1000:A7CC(entity, ...)) adds the blow's wounds unless the entity is the player and the debug switch
-// DS:3567 is set (its only other write clears it at the start, 1000:98D6): the cheat is that switch.
+// The wound (1000:A7CC(entity, ...)) adds the blow's wounds (1 or 2, DS:235E) to the entity's count DS:9E18 + e,
+// unless the entity is the player and the debug switch DS:3567 is set (its only other write clears it at the start,
+// 1000:98D6): invulnerable is that switch. An entity dies at 2 wounds (1000:13B8, each pass): with one-blow kills
+// any other entity enters the wound with one, so that this blow is its last.
 // The walk: an entity's move timer (DS:0058 + 2e, ticks) reloads with the step delay (1000:1792: DS:2330, 2 ticks,
 // times the terrain, the turn and the wounds) and the sub-step (1000:876E(e)) takes DS:3564 (1, a slow machine's 2)
 // off the tile move's four (DS:AEFC + e). For the player that sub-step is made 2 or 4 (dividing what is left of the
@@ -160,6 +187,8 @@ void cheats_melee_fn(uint32_t addr)
   if (addr == 0x1000A7CC)
   {
     *far_ptr(R.ds, 0x3567) = game_cheats.invulnerableMelee ? 1 : 0;
+    uint8_t e = (uint8_t)arg(0), *wounds = far_ptr(R.ds, (uint16_t)(0x9E18 + e));
+    if (e != 0 && e < 7 && game_cheats.oneBlowKills && *wounds < 1) *wounds = 1;
     return;
   }
   if (addr != 0x1000876E) return;

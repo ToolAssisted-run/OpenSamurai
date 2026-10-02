@@ -286,10 +286,14 @@ int main(int argc, char **argv)
   CHECK(!strcmp(setting_now(), "Invulnerable (melee)"), "CHEATS: Invulnerable (melee) first (%s)", setting_now());
   tap(SDL_SCANCODE_RIGHT);
   CHECK(C.invulnerableMelee == 1 && (applied & OVERLAY_MENU_APPLY_CHEATS), "Invulnerable (melee) on, applied (%d)", applied);
-  tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN);
+  tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN);
   CHECK(!strcmp(setting_now(), "Faster troops (battle)"), "Faster troops (%s)", setting_now());
   tap(SDL_SCANCODE_RIGHT), tap(SDL_SCANCODE_RIGHT), tap(SDL_SCANCODE_RIGHT), tap(SDL_SCANCODE_RIGHT);
   CHECK(C.fasterTroops == 3, "Faster troops: 8x at most (%d)", C.fasterTroops);
+  tap(SDL_SCANCODE_DOWN), tap(SDL_SCANCODE_DOWN);
+  CHECK(!strcmp(setting_now(), "No travel encounters"), "No travel encounters (%s)", setting_now());
+  tap(SDL_SCANCODE_RIGHT);
+  CHECK(C.noEncounters == 1, "No travel encounters on");
   tap(SDL_SCANCODE_END);
   CHECK(!strcmp(setting_now(), "Max generalship"), "Max generalship last (%s)", setting_now());
   tap(SDL_SCANCODE_RIGHT);
