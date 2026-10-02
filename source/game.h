@@ -73,6 +73,9 @@ bool game_setup(const GameHost *host);
 // A key pressed or released (the PC's scan code, set 1; extended: the grey keys, E0-prefixed), for the programs
 // that read the keyboard's port themselves (their INT 9 handlers). The BIOS's keys go through keyWaiting/readKey.
 void game_key(uint8_t scan, bool extended, bool pressed);
+// One of those handlers is hooked now (RP's, DUEL's, MELEE's): it also keeps a key repeated at the head of the BIOS's
+// buffer once, at each scan code before the BIOS's own handler adds the new key (RP's 168C:0E88)
+bool game_keyboard_hooked(void);
 
 // Runs the game from the start-up program on; returns when the player quits
 int game_run(const GameHost *host);

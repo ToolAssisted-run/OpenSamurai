@@ -823,6 +823,12 @@ checked against the originals:
   (2567:0000) read no Scroll of Honor and recorded no one in it. They now use the library's FILE entries (DS:3518,
   the first free one up to DS:3630's, as 202e:117E takes it) over the game directory's HONOR.SCL (7 records of 36
   bytes read, then all rewritten).
+- The keyboard. RP's, DUEL's and MELEE's INT 9 handlers (RP's 168C:0DA8, the same in the other two), besides the
+  keyboard joystick game.c emulated, walk the BIOS's buffer at each scan code before chaining to the BIOS: a key
+  repeated at its head is kept once (168C:0E88). And the BIOS's buffer holds 15 keys. The frontend's queue held 63
+  and kept every repeat, so a direction held on the maps, in a duel or in a melee left a train of keys for the next
+  menu. It now holds 15 and collapses the repeats at its head at each key event while a handler is hooked
+  (game_keyboard_hooked). The handler's buttons (DS:339C/339D: FFh pressed, 0 released, from `cbw / not`) were right.
 
 ## 6. Methods
 

@@ -95,13 +95,22 @@ static int joystick(void *ctx, int *x, int *y)
 }
 static SDL_Renderer *renderer;
 static SDL_Texture *texture, *texture2x;
+// the BIOS's keyboard buffer: 15 keys (its ring of 16 words); a key typed into a full one is lost
 static uint16_t keys[64];
 static int keyHead, keyTail;
 static void key_push(uint16_t k)
 {
-  if ((keyTail + 1) % 64 == keyHead) return;
+  if ((keyTail - keyHead + 64) % 64 >= 15) return;
   keys[keyTail] = k;
   keyTail = (keyTail + 1) % 64;
+}
+// RP's, DUEL's and MELEE's keyboard handlers, while hooked, at each scan code (a key's press, its repeats, its
+// release) before the BIOS's handler: a key repeated at the buffer's head kept once (game_keyboard_hooked)
+static void key_collapse(void)
+{
+  if (keyHead == keyTail || !game_keyboard_hooked()) return;
+  uint16_t k = keys[keyHead];
+  for (int n = (keyHead + 1) % 64; n != keyTail && keys[n] == k; n = (n + 1) % 64) keyHead = n;
 }
 // for scripted runs: OPENSAMURAI_KEYS="FRAME:KEY ..." (KEY hexadecimal, the BIOS's), OPENSAMURAI_SHOTS="FRAME ..."
 // (FRAME.ppm written), OPENSAMURAI_FRAMES=N (the end); OPENSAMURAI_FAST=1: a virtual clock, no waiting, the start on
@@ -236,6 +245,7 @@ static void game_key_event(uint8_t scan, bool extended, bool pressed)
   if (!pressed && !gameDown[extended][scan & 0x7F]) return;
   gameDown[extended][scan & 0x7F] = pressed;
   game_key(scan, extended, pressed);
+  key_collapse();
 }
 
 // a key typed for the player (a COMMANDS entry of the menu, or a key with Alt that closed it), as the keyboard gives
@@ -293,11 +303,12 @@ static void pump(void)
     int menu = overlay_menu_open_event(&ev);
     if (menu == 1) menu_run();
     if (menu) continue;
-    if ((ev.type == SDL_KEYDOWN && !ev.key.repeat) || ev.type == SDL_KEYUP)
+    if (ev.type == SDL_KEYDOWN || ev.type == SDL_KEYUP)
     {
       bool ext;
       uint8_t sc = pc_scan(ev.key.keysym.scancode, &ext);
-      if (sc) game_key_event(sc, ext, ev.type == SDL_KEYDOWN);
+      if (sc && !ev.key.repeat) game_key_event(sc, ext, ev.type == SDL_KEYDOWN);
+      else if (sc) key_collapse();  // (a repeat: the keyboard sends the press again)
     }
     if (ev.type == SDL_KEYDOWN)
     {

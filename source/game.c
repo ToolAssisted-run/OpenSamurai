@@ -743,11 +743,14 @@ static void key_byte(uint8_t al)
   ds[k->lastTick] = (uint8_t)now, ds[k->lastTick + 1] = (uint8_t)(now >> 8);
 }
 
+bool game_keyboard_hooked(void)
+{
+  return keyHook && *(uint16_t *)far_ptr(0, 0x26) == keyHook->handlerSeg && *(uint16_t *)far_ptr(0, 0x24) == keyHook->handlerOff;
+}
+
 void game_key(uint8_t scan, bool extended, bool pressed)
 {
-  if (!keyHook) return;
-  uint16_t off = *(uint16_t *)far_ptr(0, 0x24), seg = *(uint16_t *)far_ptr(0, 0x26);
-  if (seg != keyHook->handlerSeg || off != keyHook->handlerOff) return;  // not hooked now
+  if (!game_keyboard_hooked()) return;
   if (extended) key_byte(0xE0);
   key_byte((uint8_t)(scan | (pressed ? 0 : 0x80)));
 }
