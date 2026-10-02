@@ -23,7 +23,7 @@ The development build is rebuilt after every change. If you want a build that ne
 
 The game asks the original's crest question at the start, so keep the manual at hand. Saved games (Alt+S at the Home Option scroll) go to the game's folder, as in the original. The keys are listed below.
 
-F4 opens OpenSamurai's in-game menu, where you can change the settings, turn on cheats and find the game's commands. The game waits while the menu is open.
+F4 opens OpenSamurai's [in-game menu](#the-in-game-menu), where you can change the settings, turn on cheats and find the game's commands. The game waits while the menu is open.
 
 Found a bug or a glitch, or have an idea? Everything is welcome on the [issues page](https://github.com/ToolAssisted-run/OpenSamurai/issues).
 
@@ -47,10 +47,8 @@ Found a bug or a glitch, or have an idea? Everything is welcome on the [issues p
 
 | | |
 |---|---|
-| F4, or a click of the left mouse button | the in-game menu: the game's commands, cheats, settings, quit (the game waits while it is open) |
+| F4, or a click of the left mouse button | the [in-game menu](#the-in-game-menu): the game's commands, cheats, settings, quit (the game waits while it is open) |
 | Alt+Enter | fullscreen on or off |
-
-In the menu, the arrows move, Enter chooses, and Esc or the right mouse button goes back. F4 closes it.
 
 ### The original game's keys
 
@@ -101,9 +99,45 @@ A joystick or game controller that is plugged in is the game's joystick. OpenSam
 
 A game controller's Start or Back button opens the in-game menu. In the menu, the D-pad or the left stick moves, A chooses, and B goes back.
 
+## The in-game menu
+
+Press **F4** at any time to open the in-game menu. A click of the left mouse button, or a game controller's Start or Back button, opens it too. It is SDLPoP's menu, as SDLPoP2 has it. While it is open the game waits: its clock, music and sound stop, and it goes on where it was when you close the menu.
+
+<p>
+<img src="docs/screenshots/menu-pause.png" width="32%" alt="The in-game menu over a battlefield">
+<img src="docs/screenshots/menu-commands.png" width="32%" alt="The COMMANDS page">
+<img src="docs/screenshots/menu-cheats.png" width="32%" alt="The CHEATS page">
+<img src="docs/screenshots/menu-settings.png" width="32%" alt="The settings: GENERAL">
+<img src="docs/screenshots/menu-visuals.png" width="32%" alt="The settings: VISUALS">
+</p>
+
+| Page | What it has |
+|---|---|
+| RESUME | Closes the menu. |
+| COMMANDS | The original game's command keys: the Status Scroll (F1), the Strategic Map (F2), the Summary Scroll (F3), save and restore a game (Alt+S, Alt+R, at the Home Option scroll, as in the original), a new game (Alt+N), music and effects (Alt+V), full graphics (Alt+Z), calibrating the joystick (Alt+J) and the game's own quit (Alt+Q). Choosing one closes the menu and presses its key for you. |
+| CHEATS | The [cheats](#cheats), each on or off, or a speed from 1x to 8x. |
+| SETTINGS | GENERAL: the sound card, the volume, the joystick, skipping the title, the random seed, and "Restore defaults...". VISUALS: start fullscreen, the 4:3 aspect ratio, integer scaling, and the scaling method. |
+| QUIT GAME | Ends OpenSamurai after asking. Anything you have not saved with Alt+S is lost. |
+
+In the menu:
+
+| | |
+|---|---|
+| Arrows, or the mouse | move |
+| Enter, Space, or a click | choose |
+| Left and Right, or a click on the value | change a setting or a cheat |
+| Page Up, Page Down, Home, End, the mouse wheel | scroll a page |
+| Esc, Backspace, or the right mouse button | go back a page (on the first page: close the menu) |
+| F4 | close the menu, from any page |
+| a key with Alt | close the menu and give the key to the game |
+
+For the random seed, type the number in, and Delete goes back to the timer.
+
+The settings are saved in `OpenSamurai.cfg` when the menu closes (see [Settings](#settings)). The window and the volume change at once. The sound card, the joystick, skipping the title and the random seed take effect at the next start, as they would in the original setup. The cheats are not saved.
+
 ## Cheats
 
-The in-game menu's CHEATS page turns these on and off at any time. They are not saved: each start begins without them.
+The [in-game menu](#the-in-game-menu)'s CHEATS page turns these on and off at any time. They are not saved: each start begins without them.
 
 | Cheat | What it does |
 |---|---|
