@@ -516,18 +516,18 @@ static setting_type general_settings[] = {
 				LINK(sound), .names_list = &sound_setting_names_list,
 				.ini = "General/sound", .ini_values = sound_ini_values,
 				.text = "Sound",
-				.explanation = "The sound card, as the original setup chooses it (/AA, /AR, /AI, /AT, /AN).\n"
+				.explanation = "The sound card, as the original setup's /A options choose it.\n"
 						"Roland MT-32 needs its ROMs (README); without them, the AdLib.\n"
 						"Takes effect at the next start."},
 		{.id = SETTING_VOLUME, .style = SETTING_STYLE_NUMBER, .number_type = SETTING_INT,
 				LINK(volume), .min = 0, .max = 15, .ini = "General/volume",
 				.text = "Volume",
 				.explanation = "The volume, from 0 (silent) to 15 (full).\n"
-						"The game's Alt+V still chooses music and effects, effects only, or silence."},
+						"The game's Alt+V still switches the music and effects."},
 		{.id = SETTING_ENABLE_JOYSTICK, .style = SETTING_STYLE_TOGGLE, LINK(enable_joystick), .ini = "Controller/enable_joystick",
 				.text = "Joystick",
-				.explanation = "A joystick or game controller that is plugged in is the game's joystick (/J, /NJ).\n"
-						"Takes effect at the next start."},
+				.explanation = "A joystick or game controller plugged in is the game's\n"
+						"joystick (/J, /NJ). Takes effect at the next start."},
 		{.id = SETTING_SKIP_TITLE, .style = SETTING_STYLE_TOGGLE, LINK(skip_title), .ini = "General/skip_title",
 				.text = "Skip the title",
 				.explanation = "Start without the title sequence (/NT).\nTakes effect at the next start."},
@@ -536,9 +536,9 @@ static setting_type general_settings[] = {
 				LINK(random_seed), .min = -1, .max = 99999, .names_list = &random_seed_setting_names_list,
 				.ini = "AdditionalFeatures/random_seed",
 				.text = "Random seed",
-				.explanation = "Timer (default): a different game each time.\n"
-						"A number: the same random numbers every time.\n"
-						"Type the number in. Delete goes back to Timer. Takes effect at the next start."},
+				.explanation = "Timer (default): a different game each time. A number: the\n"
+						"same random numbers every time. Type it in; Delete: Timer.\n"
+						"Takes effect at the next start."},
 		{.id = SETTING_RESET_ALL_SETTINGS, .style = SETTING_STYLE_TEXT_ONLY,
 				.text = "Restore defaults...", .explanation = "Revert all settings to the default state."},
 };
@@ -583,11 +583,11 @@ NAMES_LIST(speed_setting_names, {"1x", "2x", "4x", "8x",});
 static setting_type cheats_settings[] = {
 		{.id = SETTING_CHEAT_INVULNERABLE_MELEE, .style = SETTING_STYLE_TOGGLE, CHEAT(invulnerableMelee), .required = &cheats_available,
 				.text = "Invulnerable (melee)",
-				.explanation = "Blows and arrows never wound you in melees (the game's own debug switch).\n"
-						"You still stagger when hit."},
+				.explanation = "Blows and arrows never wound you in melees (the game's\n"
+						"own debug switch). You still stagger when hit."},
 		{.id = SETTING_CHEAT_INVULNERABLE_DUEL, .style = SETTING_STYLE_TOGGLE, CHEAT(invulnerableDuel), .required = &cheats_available,
 				.text = "Invulnerable (duel)",
-				.explanation = "Your opponent's blows never wound you or knock you back in duels."},
+				.explanation = "Your opponent's blows never wound you or knock you back."},
 		{.id = SETTING_CHEAT_ONE_BLOW_KILLS, .style = SETTING_STYLE_TOGGLE, CHEAT(oneBlowKills), .required = &cheats_available,
 				.text = "One-blow kills (duel, melee)",
 				.explanation = "Your first blow that lands fells your opponent in duels,\n"
@@ -602,16 +602,16 @@ static setting_type cheats_settings[] = {
 		{.id = SETTING_CHEAT_FASTER_TROOPS, .style = SETTING_STYLE_NUMBER, .number_type = SETTING_INT, .max = 3,
 				CHEAT(fasterTroops), .names_list = &speed_setting_names_list, .required = &cheats_available,
 				.text = "Faster troops (battle)",
-				.explanation = "Your units march and turn faster in battles (the enemy's do not)."},
+				.explanation = "Your units march and turn faster; the enemy's do not."},
 		{.id = SETTING_CHEAT_WALK_MAP, .style = SETTING_STYLE_NUMBER, .number_type = SETTING_INT, .max = 3,
 				CHEAT(walkMap), .names_list = &speed_setting_names_list, .required = &cheats_available,
 				.text = "Faster walk (map)",
 				.explanation = "Walk faster on the province maps.\n"
-						"Encounters come every few seconds, so a trip brings fewer of them."},
+						"A shorter trip also brings fewer encounters."},
 		{.id = SETTING_CHEAT_NO_ENCOUNTERS, .style = SETTING_STYLE_TOGGLE, CHEAT(noEncounters), .required = &cheats_available,
 				.text = "No travel encounters",
-				.explanation = "Nobody stops you on the province maps: no bandits, ronin or duellists.\n"
-						"(The game's own limit of three a trip, reached from the start.)"},
+				.explanation = "Nobody stops you on the province maps:\n"
+						"no bandits, ronin, pirates or duellists."},
 		{.id = SETTING_CHEAT_WALK_MELEE, .style = SETTING_STYLE_NUMBER, .number_type = SETTING_INT, .max = 3,
 				CHEAT(walkMelee), .names_list = &speed_setting_names_list, .required = &cheats_available,
 				.text = "Faster walk (melee)",
