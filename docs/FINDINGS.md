@@ -379,6 +379,13 @@ takes about two seconds on any machine fast enough, and was instant in OpenSamur
 game.c runs it itself (`asm_graphics_slot`) at the oracle's pace: the title's first dissolve changes the screen from
 frame 1953 to 2068 in DOSBox-X, 116 frames, 552 bytes a frame (the copy has no port read in its steps and runs a
 little faster than the calibration's 533). A forced window 60 in RP now dissolves the portrait in 116 frames too.
+The calibration itself (the first call only: START's title) costs two frames for each count it tries, so its length
+is the machine's speed: in the oracle (DOSBox-X, 22000 cycles) the title's first dissolve is called at frame 1675
+(START's main at 1500) and starts changing the screen at 1952, 277 frames of a still screen, then dissolves until
+2067; the second (2223) dissolves at once. OpenSamurai leaves that pause out (it is no machine's in particular).
+Otherwise the title keeps the original's pace: its waits are a 2-second hold, the dissolve, 60 retraces, the nine
+steps' 93 and the second dissolve (OpenSamurai: dissolves at 140 and 408 frames after START begins, the oracle's
+175 and 723 less the calibration's 277 and the hold's rounding to the second).
 
 ### 5.8 Sound: the IBM speaker (ISOUND.SAM) — recompiled whole in source/isound.c, verified
 
