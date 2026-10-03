@@ -844,6 +844,15 @@ checked against the originals:
   (00-07, 10-17 over a DAC whose bit 4 is the intensity), and EGRAPHIC writes its palettes that way (a colour 8-15 as
   (c & 7) | 10h: slots 4, 15, 24). MELEE calls none of them, so the colours were the same; the mode set is the VGA
   BIOS's now (the melee's frames unchanged, pixel for pixel).
+- Long RP sessions: 16 oracle captures of 100,000 frames each (the workspace's oracle/gen_rplong.py: Enter-heavy
+  random keys, so that the turns go by; batch Z), 17 to 267 ticks and up to 23 sub-games each, 1,867 ticks in all.
+  rptest replays them with RP's whole data segment and the shared block compared at every tick: 15 of the 16 match at
+  every tick. In w_Z1, at tick 255 of 267, the keyboard handler's own bytes DS:33A0-33A2 differ (only the handler
+  reads them, and rptest does not run it: now volatile, as 3398-339F were), and the game polls for a key once more
+  than the C before the tick ends (after reading Enter in a menu); in step mode the menu cursor's frame (DS:3A5E)
+  follows at tick 257. A trace of tick 254 against the game's (oracle/rtrace2.sh: the fourth of four ticks in one
+  frame) agrees for its first 1,500 function entries, once time()'s and the picture decoder's own routines (in C
+  here) are left out; the comparison past that was not finished (*open*).
 
 ## 6. Methods
 

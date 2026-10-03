@@ -228,7 +228,9 @@ static void print_fn(uint32_t addr)
   count_fn(addr);
 }
 
-// the bytes the interrupt handlers keep (timer DS:3038-305F, keyboard DS:3398-339F) and the stack (DS:8F60-975F,
+// the bytes the interrupt handlers keep (timer DS:3038-305F, keyboard DS:3398-33A3: the captures' waits give 3398-339F;
+// 33A0-33A3, the press's tick's high byte, the prefix, the last key and the bytes to skip, are the keyboard
+// handler's own, which only it reads, and the test does not run it) and the stack (DS:8F60-975F,
 // where the reconstruction's frames are not where the original's were)
 // and the picture decoder's work area (DS:419A-5BB2: its string table, re-initialised by every decode, and its
 // private stack, which in the original also holds the frames of the catalog routines it calls for its input)
@@ -237,7 +239,7 @@ static int haveMainRegs;
 static jmp_buf tickJump;
 static void stop_at_tick(void) { longjmp(tickJump, 1); }
 
-static int volatile_byte(int k) { return (k >= 0x3038 && k < 0x3060) || (k >= 0x3398 && k < 0x33A0) || (k >= 0x419A && k < 0x5BB3) || k >= 0x8F60; }
+static int volatile_byte(int k) { return (k >= 0x3038 && k < 0x3060) || (k >= 0x3398 && k < 0x33A4) || (k >= 0x419A && k < 0x5BB3) || k >= 0x8F60; }
 
 int main(int argc, char **argv)
 {
