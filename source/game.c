@@ -428,14 +428,23 @@ static void frame(void) { poll(true); }
 // the reconstruction's busy waits take no time, so the dissolve was instant. Here it takes the frames it takes in the
 // oracle (DOSBox-X): the title's first dissolve changes the screen from frame 1953 to 2068, 116 frames, 552 bytes a
 // frame (without the calibration's port read in each step the copy runs a little faster than 533). The calibration
-// word is left alone: the pace is the frames'
+// itself (the first use, while cs:0403 is 0: the driver is loaded once, so once a session) holds the picture still for
+// two frames a count it tries, as long as the machine is fast: 277 frames in the oracle, before the title's first
+// dissolve. It stands for 2 seconds here, and leaves the count 1 (the copy without a delay; the pace is the frames')
 #define DISSOLVE_STEPS_PER_FRAME 552
+#define DISSOLVE_CALIBRATION_FRAMES 140  // 2 seconds
 static bool graphics_slot(int slot)
 {
   if (slot != 10) return false;
   uint16_t page = *(uint16_t *)far_ptr(R.ss, (uint16_t)(R.sp + 4));  // (above the far return address)
   if (page != 0)
   {
+    uint16_t *calibration = (uint16_t *)far_ptr(GAME_GRAPHICS_SEG, 0x0403);
+    if (*calibration == 0)
+    {
+      for (int k = 0; k < DISSOLVE_CALIBRATION_FRAMES; k++) frame();
+      *calibration = 1;
+    }
     uint16_t src = *(uint16_t *)far_ptr(GAME_GRAPHICS_SEG, (uint16_t)(0x1138 + 2 * page));
     uint16_t dst = *(uint16_t *)far_ptr(GAME_GRAPHICS_SEG, 0x1138);
     uint16_t lfsr = 1;

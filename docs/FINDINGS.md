@@ -382,10 +382,11 @@ little faster than the calibration's 533). A forced window 60 in RP now dissolve
 The calibration itself (the first call only: START's title) costs two frames for each count it tries, so its length
 is the machine's speed: in the oracle (DOSBox-X, 22000 cycles) the title's first dissolve is called at frame 1675
 (START's main at 1500) and starts changing the screen at 1952, 277 frames of a still screen, then dissolves until
-2067; the second (2223) dissolves at once. OpenSamurai leaves that pause out (it is no machine's in particular).
-Otherwise the title keeps the original's pace: its waits are a 2-second hold, the dissolve, 60 retraces, the nine
-steps' 93 and the second dissolve (OpenSamurai: dissolves at 140 and 408 frames after START begins, the oracle's
-175 and 723 less the calibration's 277 and the hold's rounding to the second).
+2067; the second (2223) dissolves at once. OpenSamurai stands 2 seconds (140 frames) for it, at the first dissolve
+of a session (while the driver's count cs:0403 is 0; it then leaves 1). The title keeps the original's pace: its
+waits are a 2-second hold, the dissolve, 60 retraces, the nine steps' 93 and the second dissolve (OpenSamurai: the
+first dissolve called at 140 frames after START begins, the picture still to 280, dissolving to 396, the second
+from 549; the oracle's 175, 1952 and 2223 from its START at 1500, the calibration's 277 frames in place of 140).
 
 ### 5.8 Sound: the IBM speaker (ISOUND.SAM) — recompiled whole in source/isound.c, verified
 
